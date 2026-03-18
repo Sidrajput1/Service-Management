@@ -1,48 +1,55 @@
-import { getAuth } from "@clerk/nextjs/server";
-import { connectToDb } from "./db";
-import User from "@/models/user";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getServerSession } from "next-auth";
 
-export class ApiError extends Error {
-    status:number;
-    constructor(message:string,status=500){
-        super(message);
-        this.status = status;
-        Object.setPrototypeOf(this, ApiError.prototype);
-    }
+
+export class ApiAuthError extends Error {
+     status: number;
+  constructor(message: string, status = 401) {
+    super(message);
+    this.status = status;
+    Object.setPrototypeOf(this, ApiAuthError.prototype);
+  }
+}
+
+/**
+ * Get session on server (App Router compatible)
+ */
+export async function getServerSessionOrNull() {
+  const session = await getServerSession(authOptions);
+  return session;
 };
 
 /**
- * Get the application User (from your DB) tied to the Clerk session.
- * Throws ApiError with 401 if not authenticated, or 404 if not found.
+ * Require session (throws ApiAuthError 401 if missing)
  */
-
-export async function getServerUserOrThrow(){
-    const {userId} = getAuth();
-
-    if(!userId){
-        throw new ApiError("Unauthorized",401);
-    }
-
-    await connectToDb();
-
-    const user = await User.findOne({clerkId:userId});
-    if(!user){
-        // Not created in app DB yet (frontend should call /api/auth/sync)
-    throw new ApiError("App user not found. Call /api/auth/sync to create profile.", 404);
-    };
-
-    return user;
- };
-
- /**
- * Ensure the current user has at least one role from allowedRoles array.
- * allowedRoles example: ['admin', 'dispatcher']
- */
-export async function requireRoleOrThrow(allowedRoles: string[] = []) {
-  const user = await getServerUserOrThrow();
-  if (!allowedRoles || allowedRoles.length === 0) return user;
-  if (!allowedRoles.includes(user.role)) {
-    throw new ApiError("Forbidden", 403);
+export async function requireAuth() {
+  const session = await getServerSessionOrNull();
+  if (!session || !session.user) {
+    throw new ApiAuthError("Unauthorized", 401);
   }
-  return user;
+  return session;
+}
+
+/**
+ * Require server session AND application user (from DB). Returns DB user.
+ * Throws 401 if not logged in, 404 if DB user not found.
+ */
+
+
+export async function requireCurrentUser(){
+    const session = await requireAuth();
+
+};
+// requires at least one role
+
+export async function requireRole(allowedRoles:string[]){
+
+};
+
+export async function requireAdmin(){
+
+};
+
+export async function requireTechnician(){
+    
 }
