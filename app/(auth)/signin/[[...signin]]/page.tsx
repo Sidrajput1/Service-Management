@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/router";
+
 import axios from "axios";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Alert } from "@/components/ui/alert";
+import { useRouter } from "next/navigation";
 
 function SignIn() {
   const router = useRouter();
@@ -166,7 +167,7 @@ function SignIn() {
 
         <CardFooter>
           <div className="text-sm text-muted-foreground">
-            New here? <a href="/auth/signup" className="text-primary underline">Create an account</a>
+            New here? <a href="/signup" className="text-primary underline">Create an account</a>
           </div>
         </CardFooter>
       </Card>
