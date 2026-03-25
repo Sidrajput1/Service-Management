@@ -30,7 +30,7 @@ function SignUpPage() {
     const [phoneMode,setPhoneMode] = useState(false);
     const [phone_number, setPhone_number] = useState("");
   const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
+  const [code, setCode] = useState("");
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const {register,handleSubmit,formState:{errors}} = useForm<SignupData>({resolver:zodResolver(SignupSchema)});
@@ -65,8 +65,12 @@ function SignUpPage() {
   };
 
   async function onGoogle(){
-    await signIn("google",{callbackUrl:"/dashboard"});
+    await signIn("google",{callbackUrl:"/profile/complete"});
   };
+
+  function normalizePhone(phone_number:string){
+    return phone_number.replace(/\D/g, "");
+  }
 
   async function sendOtp(){
     setInfoMessage(null);
@@ -77,9 +81,11 @@ function SignUpPage() {
       return;
     };
 
+    //const cleanPhone = normalizePhone(phone_number);
+
     try {
         setLoading(true);
-        const res = await axios.post("/api/auth/send-otp",{phone_number});
+        const res = await axios.post("/api/auth/send-otp",{phone: phone_number});
         if(res?.data?.error) setErrorMessage(res.data.error);
         else{
             setOtpSent(true);
@@ -95,12 +101,16 @@ function SignUpPage() {
    async function verifyOtpAndSignin() {
     setErrorMessage(null);
     setLoading(true);
+   // const cleanPhone = normalizePhone(phone_number);
+   // console.log("Verifying OTP for phone:", cleanPhone);
     try {
       const signInRes = await signIn("credentials", {
         redirect: false,
-        phone_number,
-        otp,
+        phone:phone_number,
+        otp:code,
       });
+     // console.log("SignIn response:", otp,phone);
+      console.log("OTP signIn response:", signInRes);
       if ((signInRes as any)?.error) {
         setErrorMessage((signInRes as any).error || "Unable to sign in");
       } else {
@@ -169,7 +179,7 @@ function SignUpPage() {
                 <Button onClick={sendOtp} disabled={loading}>
                   {loading ? "Sending..." : "Send OTP"}
                 </Button>
-                <Button onClick={() => { setPhone_number(""); setOtp(""); setOtpSent(false); }}>
+                <Button onClick={() => { setPhone_number(""); setCode(""); setOtpSent(false); }}>
                   Reset
                 </Button>
               </div>
@@ -177,7 +187,7 @@ function SignUpPage() {
               {otpSent && (
                 <div className="mt-4">
                   <Label>Enter OTP</Label>
-                  <Input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" />
+                  <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" />
                   <Button className="mt-2" onClick={verifyOtpAndSignin} disabled={loading}>
                     {loading ? "Verifying..." : "Verify & Sign in"}
                   </Button>
@@ -189,7 +199,7 @@ function SignUpPage() {
 
         <CardFooter>
           <div className="text-sm text-muted-foreground">
-            Already have an account? <a href="/auth/signin" className="text-primary underline">Sign in</a>
+            Already have an account? <a href="/signin" className="text-primary underline">Sign in</a>
           </div>
         </CardFooter>
       </Card>

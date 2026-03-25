@@ -108,7 +108,7 @@ function SignIn() {
     <div className="min-h-screen flex items-center justify-center bg-muted p-4">
       <Card className="w-full max-w-xl">
         <CardHeader>
-          <CardTitle>Sign in to your account</CardTitle>
+          <CardTitle className="text-blue-800 font-bold">Sign in to your account</CardTitle>
         </CardHeader>
         <CardContent>
           {err && <Alert variant="destructive">{err}</Alert>}

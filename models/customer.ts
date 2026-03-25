@@ -38,7 +38,7 @@ const AddressSchema = new Schema<IAddress>(
     },
     metadata: Schema.Types.Mixed,
   },
-  { _id: false }
+  { _id: false },
 );
 
 AddressSchema.index({ location: "2dsphere" });
@@ -52,9 +52,10 @@ const CustomerSchema = new Schema<ICustomer>(
     addresses: { type: [AddressSchema], default: [] },
     notes: String,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const Customer: Model<ICustomer> =
-  mongoose.models.Customer || mongoose.model<ICustomer>("Customer", CustomerSchema);
+  mongoose.models.Customer ||
+  mongoose.model<ICustomer>("Customer", CustomerSchema);
 export default Customer;

@@ -47,4 +47,24 @@ export function useDeleteLead() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["leads"] }),
   });
+};
+
+export function useCustomers(page = 1, limit = 50, q = "") {
+  return useQuery({
+    queryKey: ["customers", page, limit, q],
+    queryFn: async () => {
+      const { data } = await api.get(`/customers?page=${page}&limit=${limit}&q=${encodeURIComponent(q)}`);
+      return data;
+    },
+  });
+}
+
+export function useTechnicians(page = 1, limit = 50) {
+  return useQuery({
+    queryKey: ["technicians", page, limit],
+    queryFn: async () => {
+      const { data } = await api.get(`/add-technicians?page=${page}&limit=${limit}`);
+      return data;
+    },
+  });
 }

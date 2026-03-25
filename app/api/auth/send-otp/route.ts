@@ -14,7 +14,7 @@ function generateOtp(length = 6) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const phone_number = body?.phone_number;
+    const phone_number = body?.phone;
     if (!phone_number) return NextResponse.json({ error: "phone required" }, { status: 400 });
 
     await connectToDb();
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const code = generateOtp(6);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    await Otp.create({ phone_number, code, expiresAt });
+    await Otp.create({ phone: phone_number, code, expiresAt });
 
     // send SMS via Twilio (or swap with your provider)
     if (twilioClient && process.env.TWILIO_FROM) {

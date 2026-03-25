@@ -55,6 +55,6 @@ const BookingSchema = new Schema<IBooking>(
 
 BookingSchema.index({ "address.location": "2dsphere" });
 
-export const Booking: Model<IBooking> =
+const Booking: Model<IBooking> =
   mongoose.models.Booking || mongoose.model<IBooking>("Booking", BookingSchema);
 export default Booking;

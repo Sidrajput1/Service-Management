@@ -21,7 +21,7 @@ export default async function ProfileCompletePage() {
 
   if (!looksAnonymous && !missingEmail) {
     // profile is complete — send to dashboard
-    redirect("/dashboard");
+    redirect("/admin/dashboard");
   }
 
   // render client form to complete profile

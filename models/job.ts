@@ -25,6 +25,7 @@ export interface IJob extends Document {
   proofIds?: mongoose.Types.ObjectId[]; // references to JobProofs
   partsUsed?: { partName: string; qty: number; price?: number }[];
   notes?: string;
+  acceptedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +41,7 @@ const JobSchema = new Schema<IJob>(
       enum: [
         "scheduled",
         "assigned",
+        "accepted",
         "enroute",
         "arrived",
         "otp_verified",
@@ -59,6 +61,7 @@ const JobSchema = new Schema<IJob>(
     proofIds: [{ type: Schema.Types.ObjectId, ref: "JobProof" }],
     partsUsed: [{ partName: String, qty: Number, price: Number }],
     notes: String,
+    acceptedAt: Date,
   },
   { timestamps: true }
 );

@@ -104,13 +104,25 @@ export const authOptions = {
           if (!user) throw new Error("User not found");
           const ok = await bcrypt.compare(credentials.password, user.password);
           if (!ok) throw new Error("Invalid credentials");
-          return { id: user._id.toString(), name: user.name, email: user.email, role: user.role };
+          return {
+            id: user._id.toString(),
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          };
         }
 
         // 2) Phone + OTP login
         if (credentials.phone && credentials.otp) {
+          const cleanPhone = credentials.phone.replace(/\s+/g, "");
           // find most recent unused OTP for phone
-          const otpDoc = await Otp.findOne({ phone: credentials.phone, used: false }).sort({ createdAt: -1 });
+         // console.log("Looking for OTP for phone:", cleanPhone);
+          const otpDoc = await Otp.findOne({
+            phone: cleanPhone, 
+            code: credentials.otp, 
+            used: false,
+          }).sort({ createdAt: -1 });
+          console.log("Found OTP doc:", otpDoc);
           if (!otpDoc) throw new Error("OTP not found or expired");
           if (otpDoc.expiresAt < new Date()) throw new Error("OTP expired");
           if (otpDoc.code !== credentials.otp) throw new Error("Invalid OTP");
@@ -127,14 +139,19 @@ export const authOptions = {
             const hashed = await bcrypt.hash(randomPassword, 10);
             user = await User.create({
               name: `User${credentials.phone.slice(-4)}`,
-              email: undefined,
+              email: `user${credentials.phone.slice(-4)}@example.com`, // dummy email
               password: hashed,
               phone: credentials.phone,
               role: "customer",
             });
           }
 
-          return { id: user._id.toString(), name: user.name, email: user.email, role: user.role };
+          return {
+            id: user._id.toString(),
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          };
         }
 
         throw new Error("Invalid sign in method");
@@ -146,13 +163,22 @@ export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 
   callbacks: {
-    async signIn({ user, account, profile }: { user?: any; account?: any; profile?: any }) {
+    async signIn({
+      user,
+      account,
+      profile,
+    }: {
+      user?: any;
+      account?: any;
+      profile?: any;
+    }) {
       // When OAuth (Google) signs in, upsert user in DB
       try {
         await connectToDb();
         if (account?.provider === "google") {
           const email = (profile as any)?.email;
-          const name = (profile as any)?.name || (profile as any)?.email?.split("@")[0];
+          const name =
+            (profile as any)?.name || (profile as any)?.email?.split("@")[0];
           if (!email) return false;
 
           // upsert user

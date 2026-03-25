@@ -72,7 +72,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const parsed = BookingCreateSchema.parse(body);
 
-    const currentUser = await requireCurrentUser();
+    const currentUser = await requireCurrentUser() as any;
+    console.log("Current User:", currentUser);
 
     let customerId = parsed.customerId || null;
     let leadId = parsed.leadId || null;
@@ -142,7 +143,7 @@ export async function POST(request: Request) {
       } : undefined,
       notes: parsed.notes || undefined,
       status: "confirmed",
-      createdBy: currentUser._id,
+      createdBy: currentUser.id,
     });
 
     return NextResponse.json({ booking }, { status: 201 });

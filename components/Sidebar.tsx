@@ -1,10 +1,45 @@
-'use client";'
-import { Wrench } from "lucide-react";
+"use client";
+
 import { Button } from "./ui/button";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 
 
+import {
+  Home,
+  Users,
+  CalendarDays,
+  ClipboardList,
+  CreditCard,
+  Layers3,
+  LineChart,
+  Gauge,
+  Wrench,
+  MapPinned,
+  Clock3,
+  ShieldCheck,
+  IndianRupee,
+  MessageCircle,
+  
 
+  } from "lucide-react";
+
+const iconMap: any = {
+  home: Home,
+  users: Users,
+  calendar: CalendarDays,
+  clipboard: ClipboardList,
+  card: CreditCard,
+  layers: Layers3,
+  chart: LineChart,
+  settings: Gauge,
+  wrench: Wrench,
+  map: MapPinned,
+  clock: Clock3,
+  shield: ShieldCheck,
+  IndianRupee:IndianRupee,
+  MessageCircle:MessageCircle
+};
 
 function Sidebar({ items, title, subtitle }: { items: any[]; title: string; subtitle: string }) {
   return (
@@ -24,7 +59,7 @@ function Sidebar({ items, title, subtitle }: { items: any[]; title: string; subt
       <div className="flex-1 p-3">
         <div className="space-y-1">
           {items.map((item) => {
-            const Icon = item.icon;
+            const Icon = iconMap[item.icon];
             return (
               <Link href={item.link} 
               className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm transition ${
@@ -54,6 +89,8 @@ function Sidebar({ items, title, subtitle }: { items: any[]; title: string; subt
             <Button size="sm" variant="secondary" className="rounded-full bg-white text-slate-950 hover:bg-slate-100">
               Support
             </Button>
+            <button onClick={() => signOut({ callbackUrl: "/signin" })}>Logout</button>
+            
           </div>
         </div>
       </div>

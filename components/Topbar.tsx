@@ -3,8 +3,12 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import MobileSidebar from "./MobileSidebar";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getServerSession } from "next-auth";
 
-function Topbar({ role }: { role: "admin" | "technician" }) {
+async function Topbar({ role }: { role: "admin" | "technician" }) {
+
+  const sessionData = await getServerSession(authOptions);
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
       <div className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
@@ -38,10 +42,10 @@ function Topbar({ role }: { role: "admin" | "technician" }) {
           <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
             <Avatar className="h-9 w-9">
               <AvatarImage src="" alt="User" />
-              <AvatarFallback className="bg-slate-900 text-white">SS</AvatarFallback>
+              <AvatarFallback className="bg-slate-900 text-white">{sessionData?.user?.name?.charAt(0) || "U"}</AvatarFallback>
             </Avatar>
             <div className="hidden sm:block">
-              <div className="text-sm font-medium text-slate-900">Sidharth</div>
+              <div className="text-sm font-medium text-slate-900">{sessionData?.user?.name}</div>
               <div className="text-xs text-slate-500">{role === "admin" ? "Admin" : "Technician"}</div>
             </div>
           </div>
