@@ -5,7 +5,10 @@ export interface IJob extends Document {
   bookingId: mongoose.Types.ObjectId;
   technicianId?: mongoose.Types.ObjectId;
   assignedBy?: mongoose.Types.ObjectId;
+  invoiceId?:mongoose.Types.ObjectId;
   scheduledAt?: Date;
+  paymentReceivedAt?: Date;
+paymentMethod?: string;
   status:
     | "scheduled"
     | "assigned"
@@ -16,7 +19,9 @@ export interface IJob extends Document {
     | "on_hold"
     | "completed"
     | "cancelled";
+  
   otp?: string;
+  paymentStatus?: "unbilled" | "pending" | "partial" | "paid";
   otpExpiresAt?: Date;
   startTime?: Date;
   endTime?: Date;
@@ -28,6 +33,8 @@ export interface IJob extends Document {
   acceptedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  arrivedAt?: Date;
+  customerOtpVerifiedAt?: Date;
 }
 
 const JobSchema = new Schema<IJob>(
@@ -35,13 +42,15 @@ const JobSchema = new Schema<IJob>(
     bookingId: { type: Schema.Types.ObjectId, ref: "Booking", required: true },
     technicianId: { type: Schema.Types.ObjectId, ref: "Technician" },
     assignedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    invoiceId:{type:Schema.Types.ObjectId, ref:"Invoice"},
     scheduledAt: Date,
+    paymentReceivedAt: Date,
+paymentMethod: String,
     status: {
       type: String,
       enum: [
         "scheduled",
         "assigned",
-        "accepted",
         "enroute",
         "arrived",
         "otp_verified",
@@ -53,6 +62,11 @@ const JobSchema = new Schema<IJob>(
       default: "scheduled",
     },
     otp: String,
+    paymentStatus:{
+      type: String,
+      enum: ["unbilled", "pending", "partial", "paid"],
+      default: "unbilled",
+    },
     otpExpiresAt: Date,
     startTime: Date,
     endTime: Date,
@@ -62,6 +76,8 @@ const JobSchema = new Schema<IJob>(
     partsUsed: [{ partName: String, qty: Number, price: Number }],
     notes: String,
     acceptedAt: Date,
+    arrivedAt: Date,
+    customerOtpVerifiedAt: Date,
   },
   { timestamps: true }
 );

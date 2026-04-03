@@ -27,7 +27,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       return NextResponse.json({ error: "Job cannot be accepted in current status" }, { status: 400 });
     }
 
-    job.status = "assigned";
+    job.status = "enroute";
     job.acceptedAt = new Date();
     await job.save();
 

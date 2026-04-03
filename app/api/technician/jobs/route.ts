@@ -4,6 +4,7 @@ import { requireTechnicianProfile } from "@/lib/technician";
 import Customer from "@/models/customer";
 import Job from "@/models/job";
 import { NextResponse } from "next/server";
+import Booking from "@/models/booking";
 
 
 export async function GET() {
@@ -15,6 +16,7 @@ export async function GET() {
     const jobs = await Job.find({ technicianId: tech._id })
       .populate({
         path: "bookingId",
+        model: Booking,
         populate: {
           path: "customerId",
           model: Customer,

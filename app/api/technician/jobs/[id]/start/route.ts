@@ -10,8 +10,9 @@ const StartSchema = z.object({
   otp: z.string().min(4, "OTP is required"),
 });
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const {id} = await params;
     await requireRole(["technician"]);
     const { tech } = await requireTechnicianProfile();
     await connectToDb();
@@ -19,7 +20,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const body = await request.json();
     const parsed = StartSchema.parse(body);
 
-    const job = await Job.findById(params.id);
+    const job = await Job.findById(id);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -36,9 +37,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
     }
 
-    if (job.otpExpiresAt && job.otpExpiresAt < new Date()) {
-      return NextResponse.json({ error: "OTP expired" }, { status: 400 });
-    }
+    // if (job.otpExpiresAt && job.otpExpiresAt < new Date()) {
+    //   return NextResponse.json({ error: "OTP expired" }, { status: 400 });
+    // }
 
     job.status = "in_progress";
     job.customerOtpVerifiedAt = new Date();

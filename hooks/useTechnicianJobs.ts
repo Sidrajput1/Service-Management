@@ -29,6 +29,7 @@ export function useAcceptTechnicianJob() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { data } = await api.post(`/technician/jobs/${id}/accept`);
+      console.log("Accept job response:", data);
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["technician-jobs"] }),
@@ -42,7 +43,9 @@ export function useArriveTechnicianJob() {
       const { data } = await api.post(`/technician/jobs/${id}/arrive`);
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["technician-jobs"] }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["technician-jobs"] });
+    }
   });
 }
 

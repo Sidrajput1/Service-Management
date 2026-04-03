@@ -5,13 +5,15 @@ import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
 
-export async function POST(_: Request, { params }: { params: { id: string } }) {
+export async function POST(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
+
+    const {id} = await params;
     await requireRole(["technician"]);
     const { tech } = await requireTechnicianProfile();
     await connectToDb();
 
-    const job = await Job.findById(params.id);
+    const job = await Job.findById(id);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -20,13 +22,13 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // if (job.status !== "accepted") {
-    //   return NextResponse.json({ error: "You must accept the job first" }, { status: 400 });
-    // }
+    if (job.status !== "enroute") {
+      return NextResponse.json({ error: "You must accept the job first" }, { status: 400 });
+    }
 
 
     job.status = "arrived";
-    job.arrived = new Date();
+    job.arrivedAt = new Date();
     await job.save();
 
     return NextResponse.json({ job });

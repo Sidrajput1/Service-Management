@@ -1,4 +1,8 @@
-'use client';
+"use client";
+
+
+
+import CollectPaymentActions from "@/components/payments/CollectPaymentActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,8 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useAcceptTechnicianJob, useArriveTechnicianJob, useCompleteTechnicianJob, useStartTechnicianJob, useTechnicianJobs, useUploadTechnicianProof } from "@/hooks/useTechnicianJobs";
+import { uploadToCloudinary } from "@/lib/cloudinary";
 import { CheckCircle2, ClipboardList, Clock3, Home, MapPinned, ShieldCheck, Smartphone, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+
 
 // const revenueData = [
 //   { name: "Mon", value: 12000 },
@@ -73,9 +80,10 @@ import { useEffect, useMemo, useState } from "react";
 
 const statusOrder = [
   "assigned",
-  "accepted",
+  //"accepted", // skipping accepted as it's a quick transition and doesn't have much UI impact
+  "enroute",
   "arrived",
-  "in+progress",
+  "in_progress",
   "completed"
 ] as const;
 
@@ -133,30 +141,65 @@ function TechnicianDashboard() {
     };
   }, [jobs]);
 
-  async function onUploadProof() {
-    if (!selectedJob) return;
-    if (proofFiles.length === 0) return;
+  // async function onUploadProof() {
+  //   if (!selectedJob) return;
+  //   if (proofFiles.length === 0) return;
 
-    const proofs = await Promise.all(
-      proofFiles.map(async (file) => ({
-        url: await filteToDataUrl(file),
-        type: "photo" as const,
-        metadata: {
-          fileName: file.name,
-          size: file.size,
-          type: file.type,
-        },
-      }))
+  //   const proofs = await Promise.all(
+  //     proofFiles.map(async (file) => ({
+  //       url: await filteToDataUrl(file),
+  //       type: "photo" as const,
+  //       metadata: {
+  //         fileName: file.name,
+  //         size: file.size,
+  //         type: file.type,
+  //       },
+  //     }))
+  //   );
+
+  //   await uploadProof.mutateAsync({
+  //     id: selectedJob._id,
+  //     payload: { proofNote, proofs },
+  //   });
+
+  //   setProofFiles([]);
+  //   setProofNote("");
+  // }
+
+  async function onUploadProof() {
+  if (!selectedJob) return;
+  if (proofFiles.length === 0) return;
+
+  try {
+    const uploaded = await Promise.all(
+      proofFiles.map((file) => uploadToCloudinary(file))
     );
+
+    const proofs = uploaded.map((item) => ({
+      url: item.url,
+      type: "photo",
+      metadata: {
+        public_id: item.public_id,
+      },
+    }));
 
     await uploadProof.mutateAsync({
       id: selectedJob._id,
-      payload: { proofNote, proofs },
+      payload: {
+        proofNote,
+        proofs,
+      },
     });
 
     setProofFiles([]);
     setProofNote("");
+  } catch (err) {
+    console.error("Upload error", err);
+    alert("Upload failed");
   }
+}
+
+  
 
   const progress = selectedJob ? Math.max(0, stepIndex(selectedJob.status) + 1) : 0;
   return (
@@ -404,7 +447,7 @@ function TechnicianDashboard() {
                   <div className="grid gap-2 sm:grid-cols-5">
                     {[
                       { label: "Assigned", done: true },
-                      { label: "Accepted", done: stepIndex(selectedJob.status) >= 1 },
+                      { label: "enroute", done: stepIndex(selectedJob.status) >= 1 },
                       { label: "Reached", done: stepIndex(selectedJob.status) >= 2 },
                       { label: "Started", done: stepIndex(selectedJob.status) >= 3 },
                       { label: "Completed", done: stepIndex(selectedJob.status) >= 4 },
@@ -435,7 +478,7 @@ function TechnicianDashboard() {
                       variant="outline"
                       className="rounded-2xl"
                       onClick={() => arriveJob.mutate(selectedJob._id)}
-                      disabled={selectedJob.status !== "accepted" || arriveJob.isPending}
+                      disabled={selectedJob.status !== "enroute" || arriveJob.isPending}
                     >
                       Reach Customer
                     </Button>
@@ -501,6 +544,15 @@ function TechnicianDashboard() {
                     >
                       Complete Job
                     </Button>
+                  </div>
+                  <div>
+                    <CollectPaymentActions
+                      invoiceId={selectedJob.invoiceId}
+                      customerName={selectedJob.customerName}
+                      customerPhone={selectedJob.customerPhone}
+                      customerEmail={selectedJob.customerEmail}
+                      amount={selectedJob.amount}
+                    />
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">

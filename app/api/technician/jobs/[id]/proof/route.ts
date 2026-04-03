@@ -9,18 +9,33 @@ import JobProof from "@/models/jobProof";
 
 const ProofSchema = z.object({
   proofNote: z.string().optional().nullable(),
-  proofs: z.array(
-    z.object({
-      url: z.string().min(1),
-      type: z.enum(["photo", "before_photo", "after_photo", "signature", "video", "other"]).optional(),
-      thumbnailUrl: z.string().optional().nullable(),
-      metadata: z.record(z.string(), z.any()).optional(),
-    })
-  ).min(1, "At least one proof is required"),
+  proofs: z
+    .array(
+      z.object({
+        url: z.string().min(1),
+        type: z
+          .enum([
+            "photo",
+            "before_photo",
+            "after_photo",
+            "signature",
+            "video",
+            "other",
+          ])
+          .optional(),
+        thumbnailUrl: z.string().optional().nullable(),
+        metadata: z.record(z.string(), z.any()).optional(),
+      }),
+    )
+    .min(1, "At least one proof is required"),
 });
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
+    const { id } = await params;
     await requireRole(["technician"]);
     const { tech } = await requireTechnicianProfile();
     await connectToDb();
@@ -28,7 +43,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const body = await request.json();
     const parsed = ProofSchema.parse(body);
 
-    const job = await Job.findById(params.id);
+    const job = await Job.findById(id);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -37,8 +52,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (!["in_progress", "on_hold", "arrived", "accepted"].includes(job.status)) {
-      return NextResponse.json({ error: "Cannot upload proof in current status" }, { status: 400 });
+    if (
+      !["in_progress", "on_hold", "arrived", "accepted"].includes(job.status)
+    ) {
+      return NextResponse.json(
+        { error: "Cannot upload proof in current status" },
+        { status: 400 },
+      );
     }
 
     const proofDocs = await JobProof.insertMany(
@@ -52,7 +72,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           ...proof.metadata,
           note: parsed.proofNote || undefined,
         },
-      }))
+      })),
     );
 
     job.proofIds = [...(job.proofIds || []), ...proofDocs.map((p) => p._id)];
@@ -67,7 +87,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     return NextResponse.json(
       { error: err.message || "Server error" },
-      { status: err.status || 500 }
+      { status: err.status || 500 },
     );
   }
 }
