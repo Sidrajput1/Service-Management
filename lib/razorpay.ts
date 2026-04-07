@@ -3,9 +3,11 @@ import crypto from 'crypto';
 
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
+const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || '';
 
 const API_BASE = 'https://api.razorpay.com/v1';
+
+console.log("Razorpay Keys:", RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, WEBHOOK_SECRET);
 
 function assertEnv(){
     if(!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET){
@@ -15,8 +17,7 @@ function assertEnv(){
 
 function authHeader(){
     assertEnv();
-
-    return `Basic ${Buffer.from(`${RAZORPAY_KEY_ID} : ${RAZORPAY_KEY_SECRET}`).toString("base64")}`
+    return `Basic ${Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString("base64")}`
 };
 
 async function razorpayRequest<T>(

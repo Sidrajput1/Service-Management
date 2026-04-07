@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export async function uploadToCloudinary(file:File) {
     
-    const {data:sig} = await axios.post("api/upload/signature");
+    const {data:sig} = await axios.post("/api/upload/signature");
 
     const formData = new FormData();
     formData.append("file",file);

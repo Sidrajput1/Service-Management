@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { Button } from "@/components/ui/button";
+import api from "@/lib/api";
 
 function loadScript(src: string) {
   return new Promise<boolean>((resolve) => {
@@ -35,7 +36,9 @@ export default function CollectPaymentActions({
   async function payOnDevice() {
     setBusy(true);
     try {
-      const { data } = await axios.post(`/api/invoices/${invoiceId}/razorpay/order`);
+      const { data } = await api.post(`/invoices/${invoiceId}/razorpay/order`);
+
+      console.log("Razorpay Order Data:", data);
       const ok = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
       if (!ok) throw new Error("Razorpay checkout script failed to load");
 
@@ -52,7 +55,7 @@ export default function CollectPaymentActions({
           email: customerEmail || "",
         },
         handler: async (response: any) => {
-          await axios.post("/api/razorpay/verify", {
+          await api.post("/razorpay/verify", {
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
@@ -72,7 +75,7 @@ export default function CollectPaymentActions({
   async function createPaymentLink() {
     setBusy(true);
     try {
-      const { data } = await axios.post(`/api/invoices/${invoiceId}/razorpay/payment-link`);
+      const { data } = await api.post(`/invoices/${invoiceId}/razorpay/payment-link`);
       setPaymentLink(data.shortUrl);
       if (data.shortUrl) {
         await navigator.clipboard.writeText(data.shortUrl);

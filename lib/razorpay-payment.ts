@@ -45,7 +45,7 @@ export async function finalizeSuccessfulRazorpayPayment(input:{
     gateway: "razorpay",
     gatewayTxnId: input.paymentId || input.orderId || input.paymentLinkId,
     status: "success",
-    paymentDate: new Date(),
+    paidAt: new Date(),
     metadata: {
       source: input.source,
       rawPayload: input.rawPayload || {},

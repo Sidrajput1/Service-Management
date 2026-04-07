@@ -30,7 +30,7 @@ const PaymentSchema = new Schema<IPayment>(
     amount: { type: Number, required: true },
     mode: {
       type: String,
-      enum: ["cash", "upi", "card", "wallet", "bank_transfer", "other"],
+      enum: ["cash", "upi", "card", "wallet", "bank_transfer","checkout", "other"],
       default: "upi",
     },
     gateway: String,

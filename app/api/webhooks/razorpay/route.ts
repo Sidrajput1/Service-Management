@@ -62,6 +62,12 @@ export async function POST(request: Request) {
     }
 
     const payload = JSON.parse(rawBody);
+
+    console.log("Received Razorpay webhook:", {
+      event: payload?.event,
+      paymentId: pickPaymentId(payload),
+    }
+    );
     const eventName = payload?.event || "unknown";
 
     // Deduplicate webhook retries
@@ -114,7 +120,7 @@ export async function POST(request: Request) {
       paymentLinkId: paymentLinkId || undefined,
       amountPaise: amountPaise || Math.round(Number(invoice.balanceDue || invoice.grandTotal || 0) * 100),
       method,
-      source: "webhook",
+      source: "web",
       rawPayload: payload,
     });
 

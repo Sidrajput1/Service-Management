@@ -5,9 +5,9 @@ import { NextResponse } from "next/server";
 
 export async function POST(){
     try {
-        const timeStamp = Math.round(new Date().getTime()/1000);
+        const timestamp = Math.round(new Date().getTime()/1000);
 
-        const paramsToSign = `timeStamp=${timeStamp}`;
+        const paramsToSign = `timestamp=${timestamp}`;
 
         const signature = crypto
                 .createHash('sha1')
@@ -15,9 +15,9 @@ export async function POST(){
                 .digest("hex");
         
         return NextResponse.json({
-            timeStamp,
+            timestamp,
             signature,
-            apiKey:process.env.CLOUDINARY_API_KEY,
+            api_key:process.env.CLOUDINARY_API_KEY,
            cloudName: process.env.CLOUDINARY_CLOUD_NAME,
         })
     } catch (err:any) {

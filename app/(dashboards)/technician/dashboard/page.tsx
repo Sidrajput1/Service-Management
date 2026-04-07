@@ -545,7 +545,7 @@ function TechnicianDashboard() {
                       Complete Job
                     </Button>
                   </div>
-                  <div>
+                  {/* <div>
                     <CollectPaymentActions
                       invoiceId={selectedJob.invoiceId}
                       customerName={selectedJob.customerName}
@@ -553,7 +553,22 @@ function TechnicianDashboard() {
                       customerEmail={selectedJob.customerEmail}
                       amount={selectedJob.amount}
                     />
-                  </div>
+                  </div> */}
+                  <div>
+                  {selectedJob.invoiceId ? (
+  <CollectPaymentActions
+    invoiceId={selectedJob.invoiceId}
+    customerName={selectedJob.customerName}
+    customerPhone={selectedJob.customerPhone}
+    customerEmail={selectedJob.customerEmail}
+    amount={selectedJob.amount}
+  />
+) : (
+  <p className="text-sm text-red-500">
+    No invoice found. Please contact admin.
+  </p>
+)}
+</div>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
                     <div className="font-medium text-slate-900">Customer / service notes</div>

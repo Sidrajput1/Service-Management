@@ -8,72 +8,120 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-export async function POST(_: Request, { params }: { params: { id: string } }){
-    try {
-        await connectToDb();
+export async function POST(
+  _: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    await connectToDb();
 
-        const user = await requireCurrentUser();
+    const user = await requireCurrentUser();
 
-        const invoice = await Invoice.findById(params.id).populate("jobId").populate("customerId");
+    const { id } = await params;
 
-        if (!invoice) {
-            return new Response(JSON.stringify({ error: "Invoice not found" }), { status: 404 });
-        };
+    const invoice = await Invoice.findById(id)
+      .populate("jobId")
+      .populate("customerId");
 
-        if(invoice.status === "paid") {
-            return NextResponse.json({error:"Invoice already paid"}, {status:400});
-        };
+    if (!invoice) {
+      return new Response(JSON.stringify({ error: "Invoice not found" }), {
+        status: 404,
+      });
+    }
 
-        // admin dispatcher can create it , technician can create only foir assignerd job
+    if (invoice.status === "paid") {
+      return NextResponse.json(
+        { error: "Invoice already paid" },
+        { status: 400 },
+      );
+    }
 
-        if(user.role === "technician"){
-            const tech = await Technician.findOne({userId:user._id});
+    // admin dispatcher can create it , technician can create only foir assignerd job
 
-            if(!tech){
-                return NextResponse.json({error:"Technician profile not found"}, {status:404});
-            };
+    if (user.role === "technician") {
+      const tech = await Technician.findOne({ userId: user._id });
 
-            const job = await Job.findById(invoice.jobId);
+      if (!tech) {
+        return NextResponse.json(
+          { error: "Technician profile not found" },
+          { status: 404 },
+        );
+      }
 
-            if(!job || String(job.technicianId) !== String(tech._id)){
-                return NextResponse.json({error:"Unauthorized to creatre order for this invoice"}, {status:403});
-            }
-        } else if(!["admin" , "dispatcher"].includes(user.role)){
-            return NextResponse.json({error:"Unauthorized"}, {status:403});
-        };
+      const job = await Job.findById(invoice.jobId);
 
-        if(invoice.razorpayOrderId){
-            return NextResponse.json({
-                order:{
-                    id:invoice.razorpayOrderId,
-                    amount:Math.round(Number(invoice.balanceDue) *100),
-                    currency:"INR",
-                },
+      if (!job || String(job.technicianId) !== String(tech._id)) {
+        return NextResponse.json(
+          { error: "Unauthorized to creatre order for this invoice" },
+          { status: 403 },
+        );
+      }
+    } else if (!["admin", "dispatcher"].includes(user.role)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
-                keyId:process.env.RAZORPAY_KEY_ID,
-                invoice,
-            });
-        }
+    // if (invoice.razorpayOrderId) {
+    //   return NextResponse.json({
+    //     order: {
+    //       id: invoice.razorpayOrderId,
+    //       amount: Math.round(Number(invoice.balanceDue) * 100),
+    //       currency: "INR",
+    //     },
 
-        const amountPaise = Math.round(Number(invoice.balanceDue || invoice.grandTotal || 0) * 100);
+    //     keyId: process.env.RAZORPAY_KEY_ID,
+    //     invoice,
+    //   });
+    // }
 
-        const order = await createRazorpayOrder({
-            amountPaise,
-            currency:"INR",
-            receipt : invoice._id.toString(),
-            notes:{
-                jobId: invoice.jobId ? String(invoice.jobId) : "",
-            customerId : invoice.customerId ? String(invoice.customerId) : "",
-            }
-            
-        });
+    // Always create new order
+    invoice.razorpayOrderId = undefined;
 
-        invoice.razorpayOrderId = order.id;
-        invoice.status = "issued";
+//     if (invoice.status === "paid") {
+//   throw new Error("Already paid");
+// }
 
-        await invoice.save();
+    console.log({
+      subtotal: invoice.subtotal,
+      grandTotal: invoice.grandTotal,
+      balanceDue: invoice.balanceDue,
+    });
 
-        return NextResponse.json({
+    const amountPaise = Math.round(
+      Number(invoice.balanceDue ?? invoice.grandTotal ?? 0) * 100,
+    );
+
+    if (amountPaise <= 0) {
+      return NextResponse.json(
+        { error: "Invalid invoice amount. Cannot create payment." },
+        { status: 400 },
+      );
+    }
+    console.log(
+      "Creating Razorpay order for invoice",
+      invoice._id,
+      "amountPaise",
+      amountPaise,
+    );
+
+    const order = await createRazorpayOrder({
+      amountPaise,
+      currency: "INR",
+      receipt: invoice._id.toString(),
+      notes: {
+        invoiceId: invoice._id.toString(),
+        jobId: invoice.jobId ? String(invoice.jobId) : "",
+        customerId: invoice.customerId ? String(invoice.customerId) : "",
+      },
+    });
+
+    invoice.razorpayOrderId = order.id;
+    invoice.status = "issued";
+
+   
+
+    await invoice.save();
+
+    return NextResponse.json({
       order: {
         id: order.id,
         amount: order.amount,
@@ -84,11 +132,12 @@ export async function POST(_: Request, { params }: { params: { id: string } }){
       customer: invoice.customerId,
       job: invoice.jobId,
     });
-        
-    } catch (error) {
-       return NextResponse.json({
+  } catch (error) {
+    return NextResponse.json(
+      {
         error: error instanceof Error ? error.message : "Internal Server Error",
-       }, {status:500})
-       
-    }
+      },
+      { status: 500 },
+    );
+  }
 }

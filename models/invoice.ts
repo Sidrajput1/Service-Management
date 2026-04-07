@@ -9,7 +9,7 @@ export interface IInvoiceItem {
   qty:number;
   unitPrice:number;
   amount:number;
-  texable?:boolean;
+  taxable?:boolean;
   meta?:Record<string,any>
 }
 
@@ -64,7 +64,7 @@ const InvoiceItemSchema = new Schema<IInvoiceItem>(
     qty: { type: Number, required: true, default: 1 },
     unitPrice: { type: Number, required: true, default: 0 },
     amount: { type: Number, required: true, default: 0 },
-    texable: { type: Boolean, default: true },
+    taxable: { type: Boolean, default: true },
     meta: Schema.Types.Mixed,
   },
   {

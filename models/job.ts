@@ -5,10 +5,10 @@ export interface IJob extends Document {
   bookingId: mongoose.Types.ObjectId;
   technicianId?: mongoose.Types.ObjectId;
   assignedBy?: mongoose.Types.ObjectId;
-  invoiceId?:mongoose.Types.ObjectId;
+  invoiceId?: mongoose.Types.ObjectId;
   scheduledAt?: Date;
   paymentReceivedAt?: Date;
-paymentMethod?: string;
+  paymentMethod?: string;
   status:
     | "scheduled"
     | "assigned"
@@ -19,7 +19,7 @@ paymentMethod?: string;
     | "on_hold"
     | "completed"
     | "cancelled";
-  
+
   otp?: string;
   paymentStatus?: "unbilled" | "pending" | "partial" | "paid";
   otpExpiresAt?: Date;
@@ -42,10 +42,10 @@ const JobSchema = new Schema<IJob>(
     bookingId: { type: Schema.Types.ObjectId, ref: "Booking", required: true },
     technicianId: { type: Schema.Types.ObjectId, ref: "Technician" },
     assignedBy: { type: Schema.Types.ObjectId, ref: "User" },
-    invoiceId:{type:Schema.Types.ObjectId, ref:"Invoice"},
+    invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice" },
     scheduledAt: Date,
     paymentReceivedAt: Date,
-paymentMethod: String,
+    paymentMethod: String,
     status: {
       type: String,
       enum: [
@@ -62,7 +62,7 @@ paymentMethod: String,
       default: "scheduled",
     },
     otp: String,
-    paymentStatus:{
+    paymentStatus: {
       type: String,
       enum: ["unbilled", "pending", "partial", "paid"],
       default: "unbilled",
@@ -79,8 +79,9 @@ paymentMethod: String,
     arrivedAt: Date,
     customerOtpVerifiedAt: Date,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const Job: Model<IJob> = mongoose.models.Job || mongoose.model<IJob>("Job", JobSchema);
+export const Job: Model<IJob> =
+  mongoose.models.Job || mongoose.model<IJob>("Job", JobSchema);
 export default Job;
