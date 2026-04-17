@@ -4,6 +4,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+:root {
+  --font-poppins: 'Poppins', sans-serif;
+  --font-manrope: 'Manrope', sans-serif;
+}
+
+body {
+  font-family: var(--font-manrope);
+}
+
+.poppins {
+  font-family: var(--font-poppins);
+}
+
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

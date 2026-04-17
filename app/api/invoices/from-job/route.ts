@@ -1,12 +1,14 @@
 import { requireCurrentUser, requireRole } from "@/lib/auth";
 import { calculateInvoiceTotal, generateInvoiceNumber } from "@/lib/billing";
 import { connectToDb } from "@/lib/db";
+import { notifyInvoiceIssued } from "@/lib/notify-events";
 import Booking from "@/models/booking";
 import Customer from "@/models/customer";
 import Invoice from "@/models/invoice";
 import Job from "@/models/job";
 
 import { NextResponse } from "next/server";
+import '@/models/customer';
 
 import { z } from "zod";
 
@@ -102,6 +104,16 @@ export async function POST(req: Request) {
         ? new Date(Date.now() + parsed.dueDays * 24 * 60 * 60 * 1000)
         : undefined,
     });
+
+    const bookingPopulated = await Booking.findById(booking._id).populate("customerId");
+    const customer2 = bookingPopulated?.customerId as any;
+
+    await notifyInvoiceIssued({
+  customerUserId: customer2?.userId ? String(customer2.userId) : undefined,
+  invoiceId: invoice._id.toString(),
+  bookingId: booking._id.toString(),
+  invoiceNumber: invoice.invoiceNumber,
+});
 
     job.invoiceId = invoice._id;
     ((job.paymentStatus = "pending"), await job.save());

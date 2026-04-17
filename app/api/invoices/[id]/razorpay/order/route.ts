@@ -1,6 +1,7 @@
 import { requireCurrentUser } from "@/lib/auth";
 import { connectToDb } from "@/lib/db";
 import { createRazorpayOrder } from "@/lib/razorpay";
+import Customer from "@/models/customer";
 import Invoice from "@/models/invoice";
 import Job from "@/models/job";
 import Technician from "@/models/technician";
@@ -38,6 +39,9 @@ export async function POST(
 
     // admin dispatcher can create it , technician can create only foir assignerd job
 
+     const isAdminOrDispatcher = ["admin", "dispatcher"].includes(user.role);
+    let allowed = isAdminOrDispatcher;
+
     if (user.role === "technician") {
       const tech = await Technician.findOne({ userId: user._id });
 
@@ -50,15 +54,29 @@ export async function POST(
 
       const job = await Job.findById(invoice.jobId);
 
-      if (!job || String(job.technicianId) !== String(tech._id)) {
-        return NextResponse.json(
-          { error: "Unauthorized to creatre order for this invoice" },
-          { status: 403 },
-        );
+      if (job && String(job.technicianId) === String(tech._id)) {
+        // return NextResponse.json(
+        //   { error: "Unauthorized to creatre order for this invoice" },
+        //   { status: 403 },
+        // );
+        allowed = true;
       }
-    } else if (!["admin", "dispatcher"].includes(user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+     } 
+
+     if (user.role === "customer") {
+      const customer = await Customer.findOne({ userId: user._id });
+      if (!customer || String(invoice.customerId?._id || invoice.customerId) !== String(customer._id)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      allowed = true;
     }
+
+    if (!allowed) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+     //else if (!["admin", "dispatcher"].includes(user.role)) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    // }
 
     // if (invoice.razorpayOrderId) {
     //   return NextResponse.json({

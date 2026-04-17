@@ -1,54 +1,300 @@
-import { Bell, MoreHorizontal, Search } from "lucide-react";
+"use client";
+import {
+  Bell,
+  ChevronDown,
+  LogOut,
+  MoreHorizontal,
+  Search,
+  UserCircle2,
+} from "lucide-react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import MobileSidebar from "./MobileSidebar";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getServerSession } from "next-auth";
+import Link from "next/link";
+import NotifyBell from "./notifications/NotifyBell";
+import { useState } from "react";
+import { Badge } from "./ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
-async function Topbar({ role }: { role: "admin" | "technician" }) {
+function Topbar({
+  role,
+  userName,
+  userEmail,
+  sidebarItems,
+  sidebarTitle,
+  sidebarSubtitle,
+  sidebarAccent,
+}: {
+  role?: "admin" | "technician" | "customer";
+  userName: string;
+  userEmail: string;
+  sidebarItems: any[];
+  sidebarTitle: string;
+  sidebarSubtitle: string;
+  sidebarAccent: string;
+}) {
+  // const sessionData = await getServerSession(authOptions);
 
-  const sessionData = await getServerSession(authOptions);
+  // let headingText;
+  // let roleLabel;
+
+  // if (role === "admin") {
+  //   headingText = "Admin Operational Dashboard";
+  //   roleLabel = "Admin";
+  // } else if (role === "technician") {
+  //   headingText = "Technician App";
+  //   roleLabel = "Technician";
+  // } else if (role === "customer") {
+  //   headingText = "Customer Service Dashboard";
+  //   roleLabel = "Customer";
+  // } else {
+  //   headingText = "Dashboard";
+  //   roleLabel = "User";
+  // }
+
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const headingText =
+    role === "admin"
+      ? "Admin Operational Dashboard"
+      : role === "technician"
+        ? "Technician Workspace"
+        : role === "customer"
+          ? "Customer Service Dashboard"
+          : "Dashboard";
+
+  const roleLabel = role
+    ? role.charAt(0).toUpperCase() + role.slice(1)
+    : "User";
+
+  //const navigate = useRouter();
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
-      <div className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          {/* <div className="md:hidden">
-            <MobileSidebar role={role} />
-          </div> */}
-          <div>
-            <div className="text-sm text-slate-500">Welcome back</div>
-            <div className="text-xl font-semibold tracking-tight text-slate-900">
-              {role === "admin" ? "Admin Operations Dashboard" : "Technician Field Dashboard"}
+    // <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
+    //   <div className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+    //     <div className="flex items-center gap-3">
+    //       {/* <div className="md:hidden">
+    //         <MobileSidebar role={role} />
+    //       </div> */}
+    //       <div>
+    //         <div className="text-sm text-slate-500">Welcome back</div>
+    //         <div className="text-xl font-semibold tracking-tight text-slate-900">
+    //           {headingText}
+    //         </div>
+    //       </div>
+    //     </div>
+
+    //     <div className="flex items-center gap-3">
+    //       <div className="hidden md:block">
+    //         <div className="relative w-72">
+    //           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+    //           <Input
+    //             className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10"
+    //             placeholder="Search jobs, leads, customers..."
+    //           />
+    //         </div>
+    //       </div>
+    //       {/* <Link href="/notifications">
+    //         <Button
+    //           variant="outline"
+    //           size="icon"
+    //           className="rounded-2xl border-slate-200 bg-white"
+    //         >
+    //           <Bell className="h-4 w-4" />
+    //         </Button>
+    //       </Link> */}
+    //       {/* <div>
+    //         <NotifyBell/>
+    //       </div> */}
+    //       <NotifyBell/>
+    //       <Button
+    //         variant="outline"
+    //         size="icon"
+    //         className="rounded-2xl border-slate-200 bg-white"
+    //       >
+    //         <MoreHorizontal className="h-4 w-4" />
+    //       </Button>
+
+    //       <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+    //         <Avatar className="h-9 w-9">
+    //           <AvatarImage src="" alt="User" />
+    //           <AvatarFallback className="bg-slate-900 text-white">
+    //             {sessionData?.user?.name?.charAt(0) || "U"}
+    //           </AvatarFallback>
+    //         </Avatar>
+    //         <div className="hidden sm:block">
+    //           <div className="text-sm font-medium text-slate-900">
+    //             {sessionData?.user?.name}
+    //           </div>
+    //           <div className="text-xs text-slate-500">{roleLabel}</div>
+    //         </div>
+    //       </div>
+    //     </div>
+    //   </div>
+    // </header>
+
+    <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="lg:hidden">
+            <MobileSidebar
+              items={sidebarItems}
+              title={sidebarTitle}
+              subtitle={sidebarSubtitle}
+              accent={sidebarAccent}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="hidden text-sm text-slate-500 sm:block">
+                Welcome back
+              </p>
+              <Badge
+                variant="secondary"
+                className="rounded-full bg-blue-50 text-blue-700 hover:bg-blue-50"
+              >
+                {roleLabel}
+              </Badge>
             </div>
+            <h1 className="truncate text-lg font-semibold tracking-tight text-slate-900 sm:text-2xl">
+              {headingText}
+            </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden md:block">
-            <div className="relative w-72">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden xl:block">
+            <div className="relative w-90">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10" placeholder="Search jobs, leads, customers..." />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-10 shadow-sm focus-visible:ring-blue-500"
+                placeholder="Search jobs, leads, customers..."
+              />
             </div>
           </div>
 
-          <Button variant="outline" size="icon" className="rounded-2xl border-slate-200 bg-white">
+          {/* <Button
+            variant="outline"
+            size="icon"
+            className="h-11 w-11 rounded-2xl border-slate-200 bg-white shadow-sm"
+          >
             <Bell className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" className="rounded-2xl border-slate-200 bg-white">
+          </Button> */}
+          <NotifyBell/>
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="hidden h-11 w-11 rounded-2xl border-slate-200 bg-white shadow-sm md:inline-flex"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
 
-          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-            <Avatar className="h-9 w-9">
-              <AvatarImage src="" alt="User" />
-              <AvatarFallback className="bg-slate-900 text-white">{sessionData?.user?.name?.charAt(0) || "U"}</AvatarFallback>
-            </Avatar>
-            <div className="hidden sm:block">
-              <div className="text-sm font-medium text-slate-900">{sessionData?.user?.name}</div>
-              <div className="text-xs text-slate-500">{role === "admin" ? "Admin" : "Technician"}</div>
-            </div>
+          {/* <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:bg-slate-50">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-linear-to-br from-blue-600 to-indigo-600 text-white">
+                    {userName?.charAt(0)?.toUpperCase() || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden text-left sm:block">
+                  <div className="text-sm font-medium text-slate-900">
+                    {userName}
+                  </div>
+                  <div className="text-xs text-slate-500">{userEmail}</div>
+                </div>
+                <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:block" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-56 rounded-2xl border-slate-200 p-2"
+            >
+              <DropdownMenuLabel className="px-2 py-2">
+                <div className="text-sm font-medium text-slate-900">
+                  {userName}
+                </div>
+                <div className="text-xs text-slate-500">{userEmail}</div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="rounded-xl px-2 py-2">
+                <UserCircle2 className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="rounded-xl px-2 py-2 text-red-600 focus:text-red-600"
+                // onClick={() => signOut({ callbackUrl: "/signin" })}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu> */}
+          <div className="relative">
+      {/* Trigger Button */}
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:bg-slate-50"
+      >
+        <Avatar className="h-9 w-9">
+          <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white">
+            {userName?.charAt(0)?.toUpperCase() || "U"}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="hidden text-left sm:block">
+          <div className="text-sm font-medium text-slate-900">
+            {userName}
           </div>
+          <div className="text-xs text-slate-500">{userEmail}</div>
+        </div>
+
+        <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:block" />
+      </button>
+
+      {/* Dropdown Content */}
+      {open && (
+        <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg z-50">
+          <div className="px-2 py-2">
+            <div className="text-sm font-medium text-slate-900">
+              {userName}
+            </div>
+            <div className="text-xs text-slate-500">{userEmail}</div>
+          </div>
+
+          <div className="my-1 h-px bg-slate-200" />
+
+          <div className="flex cursor-pointer items-center rounded-xl px-2 py-2 hover:bg-slate-100">
+            <UserCircle2 className="mr-2 h-4 w-4" />
+            Profile
+          </div>
+
+          <div
+            className="flex cursor-pointer items-center rounded-xl px-2 py-2 text-red-600 hover:bg-red-50"
+            onClick={() => {
+              // signOut logic here
+            }}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </div>
+        </div>
+      )}
+    </div>
         </div>
       </div>
     </header>

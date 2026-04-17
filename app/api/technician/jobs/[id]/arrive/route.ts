@@ -4,6 +4,9 @@ import { requireRole } from "@/lib/auth";
 import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
+import Booking from "@/models/booking";
+import { notifyJobStatus } from "@/lib/notify-events";
+import '@/models/customer'
 
 export async function POST(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
@@ -30,6 +33,19 @@ export async function POST(_: Request, { params }:  { params: Promise<{ id: stri
     job.status = "arrived";
     job.arrivedAt = new Date();
     await job.save();
+
+    const booking = await Booking.findById(job.bookingId)
+                    .populate("customerId");
+    
+    const customer = booking?.customerId as any;
+
+    await notifyJobStatus({
+      customerUserId : customer?.userId ? String(customer.userId) : undefined,
+      jobId:job._id.toString(),
+      bookingId:String(job.bookingId),
+      title:"Technician reached your location",
+      message:"The technician has reached your address"
+    });
 
     return NextResponse.json({ job });
   } catch (err: any) {

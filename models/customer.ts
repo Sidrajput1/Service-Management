@@ -45,9 +45,9 @@ AddressSchema.index({ location: "2dsphere" });
 
 const CustomerSchema = new Schema<ICustomer>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User" },
+    userId: { type: Schema.Types.ObjectId, ref: "User",unique:true,sparse:true },
     name: { type: String, required: true },
-    phone: { type: String, required: true, index: true },
+    phone: { type: String, index: true },
     email: String,
     addresses: { type: [AddressSchema], default: [] },
     notes: String,

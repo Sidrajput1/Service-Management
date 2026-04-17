@@ -23,6 +23,8 @@ export async function GET(request:Request){
 
         const showInactive = url.searchParams.get("showInactive") === "true";
 
+        const type = url.searchParams.get("type") || "";
+        const q = url.searchParams.get("q") || "";
         
 
         const filter: any = {};
@@ -30,6 +32,12 @@ export async function GET(request:Request){
         if(!showInactive){
             filter.isActive = true;
         };
+        if(type){
+            filter.itemType = type;
+        }
+        if(q){
+            filter.name = { $regex: q, $options: "i" };
+        }
 
         const items = await PriceItem.find(filter).sort({itemType:1,name:1}).lean();
 

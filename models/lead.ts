@@ -1,6 +1,7 @@
 import mongoose , {Schema,Document,Model} from 'mongoose';
 
 export interface ILead extends Document {
+  customerId?: mongoose.Types.ObjectId;
     name?: string;
   phone?: string;
   email?: string;
@@ -29,6 +30,7 @@ const LeadSchema = new Schema<ILead>(
       default: "new",
     },
     assignedTo: { type: Schema.Types.ObjectId, ref: "User" },
+    customerId:{type:Schema.Types.ObjectId, ref:"Customer"},
     convertedToCustomerId: { type: Schema.Types.ObjectId, ref: "Customer" },
     remarks: String,
   },

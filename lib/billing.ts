@@ -1,6 +1,6 @@
 interface IInvoiceItem {
     qty?: number | string;
-    uniPrice?: number | string;
+    unitPrice?: number | string;
     amount?: number | string;
 }
 
@@ -8,25 +8,25 @@ export function calculateInvoiceTotal(items:IInvoiceItem[],discountAmount = 0 , 
     const safeItems = items.map((item) => ({
         ...item,
         qty:Number(item.qty || 0),
-        unitPrice:Number(item.uniPrice || 0),
+        unitPrice:Number(item.unitPrice || 0),
         amount:Number(item.amount || 0),
     }));
 
     const subtotal = safeItems.reduce((sum,item) =>  sum + Number(item.amount || 0),0);
     const safeDiscount = Math.max(0, Math.min(Number(discountAmount || 0), subtotal));
-    const taxableBase = Math.max(0,Math.min(Number(discountAmount || 0),subtotal));
+    const taxableBase = Math.max(0, subtotal - safeDiscount);
 
     const safeTaxPercent = Math.max(0,Number(taxPercent || 0));
     const taxAmount = (taxableBase * safeTaxPercent) / 100;
 
-    const grandTotal = Math.round((taxableBase + taxAmount) * 100) / 100;
-
+    //const grandTotal = Math.round((taxableBase + taxAmount) * 100) / 100;
+    const grandTotal = taxableBase + taxAmount;
     return {
          subtotal: Math.round(subtotal * 100) / 100,
     discountAmount: Math.round(safeDiscount * 100) / 100,
     taxPercent: safeTaxPercent,
     taxAmount: Math.round(taxAmount * 100) / 100,
-    grandTotal,
+    grandTotal: Math.round(grandTotal * 100) / 100,
     };
 
 

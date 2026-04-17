@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
+import { getRoleHome } from "@/lib/role-route";
 
 interface Props {
   initialName?: string;
@@ -37,10 +38,15 @@ export default function CompleteProfileForm({ initialName = "", initialEmail = "
       const res = await axios.post("/api/auth/complete-profile", { name, email });
       if (res.data?.error) {
         setErr(res.data.error);
-      } else {
-        // redirect to dashboard
-        router.push("/dashboard");
+        return
       }
+      // else {
+      //   // redirect to dashboard
+      //   router.push("/dashboard");
+      // }
+
+      const role = (session as any)?.user?.role;
+      router.push(getRoleHome(role));
     } catch (e: any) {
       setErr(e?.response?.data?.error || e.message || "Server error");
     } finally {

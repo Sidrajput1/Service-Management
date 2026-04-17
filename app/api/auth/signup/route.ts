@@ -8,11 +8,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const { email, password, name, role = "customer" } = body;
+    const { email, password, name, phone, role = "customer" } = body;
 
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !phone) {
       return NextResponse.json({
-        error: "name, email and password are required",
+        error: "All fields are required",
         status: 400,
       });
     }
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       email,
       password: hashed,
       role,
-      phone: "",
+      phone,
     });
 
     const safe = {

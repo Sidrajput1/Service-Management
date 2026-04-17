@@ -7,6 +7,9 @@ import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
 import Booking from "@/models/booking";
 import Technician from "@/models/technician";
+import '@/models/customer';
+import { createNotification, createNotificationForRole } from "@/lib/notification";
+
 
 
 const JobCreateSchema = z.object({
@@ -57,7 +60,12 @@ export async function POST(request: Request) {
     const parsed = JobCreateSchema.parse(body);
     const currentUser = await requireCurrentUser();
 
-    const booking = await Booking.findById(parsed.bookingId);
+    //const booking = await Booking.findById(parsed.bookingId);
+    const booking = await Booking.findById(parsed.bookingId).populate({
+          path: "customerId",
+          populate: { path: "userId" },
+        });
+    
     if (!booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
@@ -76,7 +84,9 @@ export async function POST(request: Request) {
       if (!technicianDoc) {
         return NextResponse.json({ error: "Technician not found" }, { status: 404 });
       }
-    }
+    };
+
+    const tech = await Technician.findById(parsed.technicianId);
 
     const otp = parsed.technicianId ? generateOtp() : undefined;
     const otpExpiresAt = otp ? new Date(Date.now() + 10 * 60 * 1000) : undefined;
@@ -93,8 +103,50 @@ export async function POST(request: Request) {
       notes: parsed.notes || undefined,
     });
 
+    const customer = booking?.customerId as any;
+    const customerUserId = customer?.userId?._id
+      ? String(customer.userId._id)
+      : null;
+
     booking.status = parsed.technicianId ? "assigned" : "confirmed";
     await booking.save();
+
+    try {
+      await createNotification({
+        recipientUserId: tech?.userId.toString(),
+        title: "Job assigned",
+        message: `You have been assigned a job for ${booking?.serviceType || "service"}`,
+        type: "job",
+        entityType: "job",
+        entityId: job._id.toString(),
+        actionUrl: `/technician/jobs/${job._id}`,
+      });
+    
+      if (customerUserId) {
+        await createNotification({
+          recipientUserId: customerUserId,
+          title: "Technician assigned",
+          message: `A technician has been assigned to your booking`,
+          type: "job",
+          entityType: "booking",
+          entityId: String(job.bookingId),
+          actionUrl: `/customer/bookings/${job.bookingId}`,
+        });
+      }
+    
+      await createNotificationForRole("admin", {
+        title: "Job assigned",
+        message: `Technician assigned for booking ${String(job.bookingId)}`,
+        type: "job",
+        entityType: "job",
+        entityId: job._id.toString(),
+        actionUrl: "/admin/jobs",
+      });
+    
+    } catch (err) {
+      console.error("Notification error:", err);
+    }
+    
 
     if (technicianDoc && parsed.technicianId) {
       technicianDoc.status = "busy";

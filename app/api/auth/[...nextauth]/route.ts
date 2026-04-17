@@ -109,6 +109,7 @@ export const authOptions = {
             name: user.name,
             email: user.email,
             role: user.role,
+            phone: user.phone,
           };
         }
 
@@ -116,10 +117,10 @@ export const authOptions = {
         if (credentials.phone && credentials.otp) {
           const cleanPhone = credentials.phone.replace(/\s+/g, "");
           // find most recent unused OTP for phone
-         // console.log("Looking for OTP for phone:", cleanPhone);
+          // console.log("Looking for OTP for phone:", cleanPhone);
           const otpDoc = await Otp.findOne({
-            phone: cleanPhone, 
-            code: credentials.otp, 
+            phone: cleanPhone,
+            code: credentials.otp,
             used: false,
           }).sort({ createdAt: -1 });
           console.log("Found OTP doc:", otpDoc);
@@ -214,6 +215,34 @@ export const authOptions = {
         if ((user as any).id) token.id = (user as any).id;
         if ((user as any).role) token.role = (user as any).role;
         if ((user as any).email) token.email = (user as any).email;
+        if ((user as any).phone) token.phone = (user as any).phone;
+        return token;
+      }
+      
+
+      try {
+        // only hit DB if we are missing important fields
+        if ((!token.phone || !token.role || !token.id) && (token.email || token.sub || token.id)) {
+          await connectToDb();
+
+          // prefer id if available, otherwise email
+          let dbUser = null;
+          if (token.id) {
+            dbUser = await User.findById(token.id).lean();
+          }
+          if (!dbUser && token.email) {
+            dbUser = await User.findOne({ email: token.email }).lean();
+          }
+
+          if (dbUser) {
+            token.id = dbUser._id.toString();
+            token.role = dbUser.role;
+            token.email = dbUser.email;
+            token.phone = dbUser.phone;
+          }
+        }
+      } catch (err) {
+        console.error("jwt callback DB fetch error:", err);
       }
       return token;
     },
@@ -222,6 +251,7 @@ export const authOptions = {
       (session as any).user.id = token.id;
       (session as any).user.role = token.role;
       (session as any).user.email = token.email;
+      (session as any).user.phone = token.phone;
       return session;
     },
   },

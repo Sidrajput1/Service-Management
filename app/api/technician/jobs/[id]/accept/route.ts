@@ -4,6 +4,8 @@ import { requireRole } from "@/lib/auth";
 import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
+import Booking from "@/models/booking";
+import { notifyJobStatus } from "@/lib/notify-events";
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> } ) {
   try {
@@ -33,6 +35,17 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
     tech.status = "busy";
     await tech.save();
+
+    const booking = await Booking.findById(job.bookingId).populate("customerId");
+    const customer = booking?.customerId as any;
+
+    await notifyJobStatus({
+      customerUserId:customer?.userId ? String(customer.userId) : undefined,
+      jobId: job._id.toString(),
+  bookingId: String(job.bookingId),
+  title: "Technician accepted your job",
+  message: "A technician has accepted your service request",
+    })
 
     return NextResponse.json({ job });
   } catch (err: any) {

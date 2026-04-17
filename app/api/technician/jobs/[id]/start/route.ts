@@ -5,14 +5,20 @@ import { requireRole } from "@/lib/auth";
 import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
+import Booking from "@/models/booking";
+import { notifyJobStatus } from "@/lib/notify-events";
+import "@/models/customer";
 
 const StartSchema = z.object({
   otp: z.string().min(4, "OTP is required"),
 });
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    const {id} = await params;
+    const { id } = await params;
     await requireRole(["technician"]);
     const { tech } = await requireTechnicianProfile();
     await connectToDb();
@@ -30,7 +36,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     if (job.status !== "arrived") {
-      return NextResponse.json({ error: "You must reach the customer first" }, { status: 400 });
+      return NextResponse.json(
+        { error: "You must reach the customer first" },
+        { status: 400 },
+      );
     }
 
     if (!job.otp || job.otp !== parsed.otp) {
@@ -42,6 +51,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // }
 
     job.status = "in_progress";
+
+    const booking = await Booking.findById(job.bookingId).populate(
+      "customerId",
+    );
+    const customer = booking?.customerId as any;
+
+    await notifyJobStatus({
+      customerUserId: customer?.userId ? String(customer.userId) : undefined,
+      jobId: job._id.toString(),
+      bookingId: String(job.bookingId),
+      title: "Service started",
+      message: "Your service work has started",
+    });
     job.customerOtpVerifiedAt = new Date();
     job.startTime = new Date();
     await job.save();
@@ -54,7 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json(
       { error: err.message || "Server error" },
-      { status: err.status || 500 }
+      { status: err.status || 500 },
     );
   }
 }

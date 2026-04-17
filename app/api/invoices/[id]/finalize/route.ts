@@ -6,12 +6,13 @@ import { calculateInvoiceTotal } from "@/lib/billing";
 import Job from "@/models/job";
 
 
-export async function POST(_: Request, { params }: { params: { id: string } }) {
+export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole(["admin", "dispatcher"]);
+    await requireRole(["admin", "dispatcher","customer"]);
     await connectToDb();
 
-    const invoice = await Invoice.findById(params.id);
+    const {id} = await params;
+    const invoice = await Invoice.findById(id);
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }

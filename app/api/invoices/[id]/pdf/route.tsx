@@ -4,13 +4,16 @@ import Invoice from "@/models/invoice";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
 import InvoicePdf from "@/components/invoice/InvoicePdf";
+import "@/models/job";
+import "@/models/booking";
+import "@/models/customer";
 
 
-export async function GET( _: Request, { params }: { params: { id: string } }){
+export async function GET( _: Request, { params }: { params: Promise<{ id: string }> }){
     try {
-        await requireRole(["admin", "manager"]);
+        await requireRole(["admin", "manager","customer"]);
         await connectToDb();
-        const {id} =  params;
+        const {id} = await params;
 
         const invoice = await Invoice.findById(id)
                         .populate("jobId")

@@ -4,6 +4,10 @@ import { requireRole } from "@/lib/auth";
 import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
+import Booking from "@/models/booking";
+import { notifyJobStatus } from "@/lib/notify-events";
+import '@/models/customer';
+import '@/models/user';
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -31,6 +35,35 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     }
 
     job.status = "completed";
+
+//     const booking = await Booking.findById(job.bookingId).populate("customerId");
+//     const customer = booking?.customerId as any;
+
+//     await notifyJobStatus({
+//   customerUserId: customer?.userId ? String(customer.userId) : undefined,
+//   jobId: job._id.toString(),
+//   bookingId: String(job.bookingId),
+//   title: "Service completed",
+//   message: "Your service work has been completed",
+// });
+
+const booking = await Booking.findById(job.bookingId).populate({
+  path: "customerId",
+  populate: { path: "userId" },
+});
+
+const customer: any = booking?.customerId;
+const customerUserId = customer?.userId?._id ? String(customer.userId._id) : null;
+
+if (customerUserId) {
+  await notifyJobStatus({
+    customerUserId,
+    jobId: job._id.toString(),
+    bookingId: String(job.bookingId),
+    title: "Service completed",
+    message: "Your service work has been completed",
+  });
+}
     job.endTime = new Date();
     await job.save();
 
@@ -46,6 +79,17 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
     tech.jobsCompleted = (tech.jobsCompleted || 0) + 1;
     await tech.save();
+    //const tech = await Technician.findById(job.technicianId);
+if (tech) {
+  tech.lastCompletedWorkLocation = {
+    type: "Point",
+    coordinates: tech.currentLocation?.coordinates || [0, 0],
+    updatedAt: new Date(),
+    addressText: booking?.address?.addressLine || "",
+    jobId: job._id,
+  };
+  await tech.save();
+}
 
     return NextResponse.json({ job });
   } catch (err: any) {

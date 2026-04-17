@@ -105,73 +105,183 @@ function SignIn() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted p-4">
-      <Card className="w-full max-w-xl">
-        <CardHeader>
-          <CardTitle className="text-blue-800 font-bold">Sign in to your account</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {err && <Alert variant="destructive">{err}</Alert>}
-          {info && <Alert>{info}</Alert>}
+    // <div className="min-h-screen flex items-center justify-center bg-muted p-4">
+    //   <Card className="w-full max-w-xl">
+    //     <CardHeader>
+    //       <CardTitle className="text-blue-800 font-bold">Sign in to your account</CardTitle>
+    //     </CardHeader>
+    //     <CardContent>
+    //       {err && <Alert variant="destructive">{err}</Alert>}
+    //       {info && <Alert>{info}</Alert>}
 
-          {/* Email sign in */}
-          <form onSubmit={onSignIn} className="space-y-3">
-            <div>
-              <Label>Email</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
-            </div>
+    //       {/* Email sign in */}
+    //       <form onSubmit={onSignIn} className="space-y-3">
+    //         <div>
+    //           <Label>Email</Label>
+    //           <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+    //         </div>
 
-            <div>
-              <Label>Password</Label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-            </div>
+    //         <div>
+    //           <Label>Password</Label>
+    //           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+    //         </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
-            </Button>
-          </form>
+    //         <Button type="submit" className="w-full" disabled={loading}>
+    //           {loading ? "Signing in..." : "Sign in"}
+    //         </Button>
+    //       </form>
 
-          <div className="my-4">
-            <Separator />
-            <div className="text-center py-3">or</div>
-            <div className="flex gap-3 justify-center">
-              <Button onClick={handleGoogle} variant="outline">Continue with Google</Button>
-              <Button onClick={() => { setOtpSent(false); setInfo(null); setErr(null); }} variant="ghost">Sign in with phone</Button>
-            </div>
-          </div>
+    //       <div className="my-4">
+    //         <Separator />
+    //         <div className="text-center py-3">or</div>
+    //         <div className="flex gap-3 justify-center">
+    //           <Button onClick={handleGoogle} variant="outline">Continue with Google</Button>
+    //           <Button onClick={() => { setOtpSent(false); setInfo(null); setErr(null); }} variant="ghost">Sign in with phone</Button>
+    //         </div>
+    //       </div>
 
-          {/* Phone OTP */}
-          <div className="border rounded p-4">
-            <Label>Phone (with country code)</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+919876543210" />
-            <div className="flex gap-2 mt-2">
-              <Button onClick={sendOtp} disabled={loading}>
-                {loading ? "Sending..." : "Send OTP"}
-              </Button>
-              <Button onClick={() => { setPhone(""); setOtp(""); setOtpSent(false); setErr(null); }}>
-                Reset
-              </Button>
-            </div>
+    //       {/* Phone OTP */}
+    //       <div className="border rounded p-4">
+    //         <Label>Phone (with country code)</Label>
+    //         <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+919876543210" />
+    //         <div className="flex gap-2 mt-2">
+    //           <Button onClick={sendOtp} disabled={loading}>
+    //             {loading ? "Sending..." : "Send OTP"}
+    //           </Button>
+    //           <Button onClick={() => { setPhone(""); setOtp(""); setOtpSent(false); setErr(null); }}>
+    //             Reset
+    //           </Button>
+    //         </div>
 
-            {otpSent && (
-              <div className="mt-4">
-                <Label>Enter OTP</Label>
-                <Input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" />
-                <Button className="mt-2" onClick={verifyOtpAndSignIn} disabled={loading}>
-                  {loading ? "Verifying..." : "Verify & Sign in"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardContent>
+    //         {otpSent && (
+    //           <div className="mt-4">
+    //             <Label>Enter OTP</Label>
+    //             <Input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" />
+    //             <Button className="mt-2" onClick={verifyOtpAndSignIn} disabled={loading}>
+    //               {loading ? "Verifying..." : "Verify & Sign in"}
+    //             </Button>
+    //           </div>
+    //         )}
+    //       </div>
+    //     </CardContent>
 
-        <CardFooter>
-          <div className="text-sm text-muted-foreground">
-            New here? <a href="/signup" className="text-primary underline">Create an account</a>
-          </div>
-        </CardFooter>
-      </Card>
+    //     <CardFooter>
+    //       <div className="text-sm text-muted-foreground">
+    //         New here? <a href="/signup" className="text-primary underline">Create an account</a>
+    //       </div>
+    //     </CardFooter>
+    //   </Card>
+    // </div>
+    // ✅ PROFESSIONAL AUTH UI (SIGN IN + SIGN UP STYLE UPGRADE)
+// Clean SaaS style with gradient background, better spacing, and polished UI
+
+<div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 via-white to-indigo-50 p-4">
+  <div className="w-full max-w-6xl grid lg:grid-cols-2 rounded-3xl overflow-hidden shadow-2xl border border-blue-100 bg-white">
+
+    {/* LEFT SIDE (Branding / Info Panel) */}
+    <div className="hidden lg:flex flex-col justify-between bg-linear-to-br from-blue-600 via-indigo-600 to-cyan-500 text-white p-10">
+      <div>
+        <h2 className="text-3xl font-semibold tracking-tight">ServiceFlow SaaS</h2>
+        <p className="mt-4 text-sm text-white/80">
+          Manage bookings, technicians, payments, and customers — all in one modern platform.
+        </p>
+      </div>
+
+      <div className="space-y-4 text-sm">
+        <p>✔ Booking & Job Management</p>
+        <p>✔ Technician Workflow Tracking</p>
+        <p>✔ Invoice & Razorpay Payments</p>
+        <p>✔ Role-based Dashboards</p>
+      </div>
+
+      <p className="text-xs text-white/70">Built for modern service businesses</p>
     </div>
+
+    {/* RIGHT SIDE (FORM) */}
+    <div className="p-6 sm:p-10">
+      <div className="max-w-md mx-auto">
+
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">
+            Welcome back 👋
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Sign in to continue managing your services
+          </p>
+        </div>
+
+        {err && <Alert variant="destructive" className="mb-4">{err}</Alert>}
+        {info && <Alert className="mb-4">{info}</Alert>}
+
+        {/* Email Login */}
+        <form onSubmit={onSignIn} className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium text-slate-700">Email</Label>
+            <Input className="mt-1" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium text-slate-700">Password</Label>
+            <Input className="mt-1" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+          </div>
+
+          <Button type="submit" className="w-full bg-linear-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700" disabled={loading}>
+            {loading ? "Signing in..." : "Sign in"}
+          </Button>
+        </form>
+
+        {/* Divider */}
+        <div className="my-6 flex items-center gap-3">
+          <div className="flex-1 h-px bg-slate-200" />
+          <span className="text-xs text-slate-400">OR</span>
+          <div className="flex-1 h-px bg-slate-200" />
+        </div>
+
+        {/* Social Login */}
+        <div className="flex gap-3">
+          <Button onClick={handleGoogle} variant="outline" className="w-full">
+            Google
+          </Button>
+          <Button onClick={() => { setOtpSent(false); setInfo(null); setErr(null); }} variant="ghost" className="w-full">
+            Phone
+          </Button>
+        </div>
+
+        {/* OTP Section */}
+        <div className="mt-6 border border-slate-200 rounded-xl p-4 bg-slate-50">
+          <Label className="text-sm font-medium text-slate-700">Phone</Label>
+          <Input className="mt-1" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 9876543210" />
+
+          <div className="flex gap-2 mt-3">
+            <Button onClick={sendOtp} disabled={loading} className="flex-1">
+              {loading ? "Sending..." : "Send OTP"}
+            </Button>
+            <Button variant="outline" onClick={() => { setPhone(""); setOtp(""); setOtpSent(false); }}>
+              Reset
+            </Button>
+          </div>
+
+          {otpSent && (
+            <div className="mt-4">
+              <Label className="text-sm font-medium text-slate-700">Enter OTP</Label>
+              <Input className="mt-1" value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" />
+              <Button className="mt-3 w-full" onClick={verifyOtpAndSignIn} disabled={loading}>
+                {loading ? "Verifying..." : "Verify & Sign in"}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <p className="text-sm text-slate-500 mt-6 text-center">
+          New here? <a href="/signup" className="text-blue-600 font-medium hover:underline">Create account</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
   );
 }
 
