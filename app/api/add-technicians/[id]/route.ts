@@ -37,15 +37,17 @@ export async function GET(_: Request, { params }:  { params: Promise<{ id: strin
   }
 }
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin"]);
     await connectToDb();
 
+    const {id} = await params;
+
     const body = await request.json();
     const parsed = UpdateTechnicianSchema.parse(body);
 
-    const technician = await Technician.findByIdAndUpdate(params.id, parsed, {
+    const technician = await Technician.findByIdAndUpdate(id, parsed, {
       new: true,
     }).populate("userId");
 
@@ -66,12 +68,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin"]);
     await connectToDb();
+     const {id} = await params;
 
-    const technician = await Technician.findById(params.id);
+    const technician = await Technician.findById(id);
     if (!technician) {
       return NextResponse.json({ error: "Technician not found" }, { status: 404 });
     }
@@ -82,7 +85,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       await user.save();
     }
 
-    await Technician.findByIdAndDelete(params.id);
+    await Technician.findByIdAndDelete(id);
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
