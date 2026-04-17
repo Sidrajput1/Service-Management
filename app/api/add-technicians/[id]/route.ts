@@ -16,12 +16,14 @@ const UpdateTechnicianSchema = z.object({
   metadata: z.record(z.string(), z.any()).optional(),
 });
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin", "dispatcher"]);
     await connectToDb();
 
-    const technician = await Technician.findById(params.id).populate("userId");
+    const {id} = await params;
+
+    const technician = await Technician.findById(id).populate("userId");
     if (!technician) {
       return NextResponse.json({ error: "Technician not found" }, { status: 404 });
     }
