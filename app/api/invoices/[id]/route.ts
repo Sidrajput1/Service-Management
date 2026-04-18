@@ -35,15 +35,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 };
 
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> } ) {
   try {
     await requireRole(["admin", "dispatcher"]);
     await connectToDb();
 
+    const {id} = await params;
+
     const body = await request.json();
     const parsed = UpdateInvoiceSchema.parse(body);
 
-    const invoice = await Invoice.findById(params.id);
+    const invoice = await Invoice.findById(id);
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
@@ -77,12 +79,14 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin"]);
     await connectToDb();
 
-    const invoice = await Invoice.findById(params.id);
+    const {id} = await params;
+
+    const invoice = await Invoice.findById(id);
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
@@ -91,7 +95,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "Paid invoice cannot be deleted" }, { status: 400 });
     }
 
-    await Invoice.findByIdAndDelete(params.id);
+    await Invoice.findByIdAndDelete(id);
 
     const job = await Job.findById(invoice.jobId);
     if (job) {
