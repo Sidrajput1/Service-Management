@@ -105,7 +105,7 @@ function CustomerJobDetails({session}:any) {
               <div className="text-sm text-slate-600">
                 Due: <strong>₹{job.invoiceId.balanceDue}</strong>
               </div>
-              <Button asChild variant="outline">
+              <Button  variant="outline">
                 <Link href={`/customer/invoice/${job.invoiceId._id}`}>
                   Open Invoice
                 </Link>

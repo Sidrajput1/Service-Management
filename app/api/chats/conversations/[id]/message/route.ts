@@ -183,8 +183,8 @@ export async function POST(
       attachments: message.attachments,
       messageType: message.messageType,
       readBy: message.readBy,
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
+      //createdAt: message.createdAt,
+      //updatedAt: message.updatedAt,
       metadata: message.metadata,
     };
 

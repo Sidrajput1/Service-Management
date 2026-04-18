@@ -36,8 +36,8 @@ export async function POST(request:Request){
         return NextResponse.json({ error: "Job not found" }, { status: 404 });
       }
 
-      const customerUserId = job.bookingId?.customerId?.userId;
-      const technicianUserId = job.technicianId?.userId;
+      const customerUserId = (job.bookingId as any)?.customerId?.userId;
+      const technicianUserId = (job.technicianId as any)?.userId;
 
       if (!customerUserId || !technicianUserId) {
         return NextResponse.json(
@@ -60,7 +60,7 @@ export async function POST(request:Request){
         type: "job",
         jobId: job._id,
         bookingId: job.bookingId?._id || null,
-        subject: subject || job.bookingId?.serviceType || "Job chat",
+        subject: subject || (job.bookingId as any)?.serviceType || "Job chat",
         participantKey,
         participants: [
           {

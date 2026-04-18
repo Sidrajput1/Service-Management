@@ -38,7 +38,7 @@ function PriceMaster() {
 
     const [message,setMessage] = useState<string | null>(null);
 
-    const {data,isLoading} = usePriceItem(showInactive);
+    const {data,isLoading} = usePriceItem({ showInactive });
 
     const createItem = useCreatePriceItem();
 
@@ -53,7 +53,7 @@ function PriceMaster() {
         [items,editId]
     );
 
-    const {register, handleSubmit,reset,setValue,formState:{errors,isSubmitting}} = useForm<FormValues>({
+    const {register, handleSubmit,reset,setValue,formState:{errors,isSubmitting}} = useForm({
         resolver:zodResolver(PriceSchema),
         defaultValues:{
             itemType:"service",

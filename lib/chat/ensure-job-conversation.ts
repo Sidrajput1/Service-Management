@@ -44,7 +44,7 @@ if (!technicianUserId) {
     type: "job",
     jobId: job._id,
     bookingId: job.bookingId?._id || null,
-    subject: job.bookingId?.serviceType as any || "Job chat",
+    subject: (job.bookingId as any)?.serviceType || "Job chat",
     participantKey,
     participants: [
       {

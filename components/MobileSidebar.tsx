@@ -50,7 +50,7 @@ export default function MobileSidebar({
 
   return (
     <Sheet>
-      <SheetTrigger asChild>
+      <SheetTrigger >
         <Button variant="outline" size="icon" className="h-11 w-11 rounded-2xl border-slate-200 bg-white shadow-sm lg:hidden">
           <Menu className="h-4 w-4" />
         </Button>

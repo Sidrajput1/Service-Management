@@ -61,30 +61,60 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+// const InvoiceSchema = z.object({
+//   invoiceNumber: z.string().optional(),
+
+//   jobId: z.string().min(1, "Job is required"),
+
+//   discountAmount: z.coerce.number().default(0),
+//   taxPercent: z.coerce.number().default(18),
+
+//   notes: z.string().optional(),
+
+//   dueDays: z.coerce.number().default(0),
+
+//   items: z
+//     .array(
+//       z.object({
+//         itemType: z.enum(["service", "part", "visit", "discount", "other"]),
+//         description: z.string().min(1),
+//         //qty: z.coerce.number().positive("Quantity must be a positive number"),
+//         //qty: z.coerce.number().transform((val) => Number(val)),
+//         //unitPrice: z.coerce.number().min(0, "Unit price cannot be negative"),
+//         //unitPrice: z.coerce.number().transform((val) => Number(val)),
+//           qty: z.coerce.number().pipe(z.number().positive()),
+//         unitPrice: z.coerce.number().pipe(z.number().min(0)),
+
+//       }),
+//     )
+//     .min(1, "At least one item required"),
+// });
+
+const num = z.union([z.string(), z.number()]).transform((val) => Number(val));
+
 const InvoiceSchema = z.object({
   invoiceNumber: z.string().optional(),
 
   jobId: z.string().min(1, "Job is required"),
 
-  discountAmount: z.coerce.number().default(0),
-  taxPercent: z.coerce.number().default(18),
+  discountAmount: num.default(0),
+  taxPercent: num.default(18),
+  dueDays: num.default(0),
 
   notes: z.string().optional(),
-
-  dueDays: z.coerce.number().default(0),
 
   items: z
     .array(
       z.object({
         itemType: z.enum(["service", "part", "visit", "discount", "other"]),
         description: z.string().min(1),
-        qty: z.coerce.number().positive("Quantity must be a positive number"),
-        unitPrice: z.coerce.number().min(0, "Unit price cannot be negative"),
+
+        qty: num.refine((v) => v > 0, "Quantity must be positive"),
+        unitPrice: num.refine((v) => v >= 0, "Price cannot be negative"),
       }),
     )
     .min(1, "At least one item required"),
 });
-
 type InvoiceForm = z.infer<typeof InvoiceSchema>;
 type SubmitHandler<T> = (
   data: T,
@@ -192,13 +222,20 @@ export default function AdminBillingPage() {
     watch,
     setValue,
     formState: { isSubmitting, errors },
-  } = useForm<InvoiceForm>({
+  } = useForm({
     resolver: zodResolver(InvoiceSchema),
     defaultValues: {
       discountAmount: 0,
       taxPercent: 18,
       dueDays: 0,
-      items: [{ itemType: "service", description: "", qty: 1, unitPrice: 0 }],
+      items: [
+        {
+          itemType: "service",
+          description: "",
+          qty: 1,
+          unitPrice: 0,
+        },
+      ],
     },
   });
 

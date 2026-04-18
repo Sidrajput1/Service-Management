@@ -6,7 +6,7 @@ export default function TechDashWrapper({ session }: { session: any }) {
     if (!session) {
     return <div>No session found</div>;
   }
-  return <TechnicianDashboard session={session}/>
+  return <TechnicianDashboard />
   
 }
 

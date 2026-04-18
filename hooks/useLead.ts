@@ -1,6 +1,6 @@
 "use client";
 import api from "@/lib/api";
-import {keepPreviousData, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useLeads(page = 1, limit = 20, q = "") {
   return useQuery({
@@ -10,7 +10,7 @@ export function useLeads(page = 1, limit = 20, q = "") {
       const { data } = await api.get(url);
       return data;
     },
-    keepPreviousData: true,
+    
     staleTime: 1000 * 10,
   });
 };

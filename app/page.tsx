@@ -348,7 +348,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="contact" className="border-t border-blue-100 bg-gradient-to-r from-blue-700 via-indigo-700 to-cyan-600 text-white">
+        <section id="contact" className="border-t border-blue-100 bg-linear-to-r from-blue-700 via-indigo-700 to-cyan-600 text-white">
           <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
             <div className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-center">
               <div className="max-w-2xl">
@@ -362,10 +362,10 @@ export default function LandingPage() {
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild size="lg" className="rounded-xl bg-white px-6 text-slate-900 shadow-lg shadow-black/10 hover:bg-slate-100">
+                <Button  size="lg" className="rounded-xl bg-white px-6 text-slate-900 shadow-lg shadow-black/10 hover:bg-slate-100">
                   <Link href="/signup">Create account</Link>
                 </Button>
-                <Button asChild size="lg" variant="outline" className="rounded-xl border-white/25 px-6 text-white hover:bg-white/10 hover:text-white">
+                <Button  size="lg" variant="outline" className="rounded-xl border-white/25 px-6 text-white hover:bg-white/10 hover:text-white">
                   <Link href="/signin">Sign in</Link>
                 </Button>
               </div>

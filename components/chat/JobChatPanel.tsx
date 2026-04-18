@@ -83,7 +83,7 @@ export default function JobChatPanel({
     //     currentUserName={currentUserName}
     // />
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger >
         <Button className="rounded-xl bg-linear-to-r from-cyan-600 to-emerald-600 text-white hover:from-cyan-700 hover:to-emerald-700">
           <MessageCircle className="mr-2 h-4 w-4" />
           {triggerLabel}
