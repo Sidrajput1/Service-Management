@@ -21,15 +21,16 @@ const AddItemsSchema = z.object({
   ).min(1),
 });
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin", "dispatcher"]);
     await connectToDb();
 
+    const {id} = await params;
     const body = await request.json();
     const parsed = AddItemsSchema.parse(body);
 
-    const invoice = await Invoice.findById(params.id);
+    const invoice = await Invoice.findById(id);
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }

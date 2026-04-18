@@ -6,13 +6,14 @@ import { createRazorpayPaymentLink } from "@/lib/razorpay";
 import Invoice from "@/models/invoice";
 import { NextResponse } from "next/server";
 
-export async function POST(_: Request, { params }: { params: { id: string } }) {
+export async function POST(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin", "dispatcher"]);
 
     await connectToDb();
 
-    const invoice = await Invoice.findById(params.id)
+    const {id} = await params;
+    const invoice = await Invoice.findById(id)
       .populate("jobId")
       .populate("customerId")
       .populate("bookingId");

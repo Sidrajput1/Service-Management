@@ -25,12 +25,13 @@ const JobUpdateSchema = z.object({
   scheduledAt: z.string().optional().nullable(),
 });
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin", "dispatcher"]);
     await connectToDb();
 
-    const job = await Job.findById(params.id)
+    const {id} = await params;
+    const job = await Job.findById(id)
       .populate("bookingId")
       .populate("technicianId")
       .lean();
@@ -48,16 +49,17 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   }
 }
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin", "dispatcher"]);
     await connectToDb();
 
+    const {id} = await params;
     const body = await request.json();
     const parsed = JobUpdateSchema.parse(body);
 
     const job = await Job.findByIdAndUpdate(
-      params.id,
+      id,
       {
         ...parsed,
         scheduledAt: parsed.scheduledAt ? new Date(parsed.scheduledAt) : undefined,
@@ -82,12 +84,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin"]);
     await connectToDb();
 
-    const deleted = await Job.findByIdAndDelete(params.id);
+    const {id} = await params;
+    const deleted = await Job.findByIdAndDelete(id);
     if (!deleted) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }

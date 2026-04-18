@@ -5,13 +5,14 @@ import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["technician"]);
     const { tech } = await requireTechnicianProfile();
     await connectToDb();
 
-    const job = await Job.findById(params.id)
+    const {id} = await params;
+    const job = await Job.findById(id)
       .populate({
         path: "bookingId",
         populate: { path: "customerId" },

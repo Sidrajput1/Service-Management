@@ -24,12 +24,13 @@ const BookingUpdateSchema = z.object({
     .optional(),
 });
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin", "dispatcher"]);
     await connectToDb();
+    const {id} = await params;
 
-    const booking = await Booking.findById(params.id)
+    const booking = await Booking.findById(id)
       .populate("customerId")
       .populate("leadId")
       .lean();
@@ -47,16 +48,17 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   }
 }
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin", "dispatcher"]);
     await connectToDb();
 
+    const {id} = await params;
     const body = await request.json();
     const parsed = BookingUpdateSchema.parse(body);
 
     const booking = await Booking.findByIdAndUpdate(
-      params.id,
+      id,
       {
         ...parsed,
         scheduledAt: parsed.scheduledAt ? new Date(parsed.scheduledAt) : undefined,
@@ -81,12 +83,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin"]);
     await connectToDb();
+     const {id} = await params;
 
-    const deleted = await Booking.findByIdAndDelete(params.id);
+    const deleted = await Booking.findByIdAndDelete(id);
     if (!deleted) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }

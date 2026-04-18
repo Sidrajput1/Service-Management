@@ -17,12 +17,13 @@ const LeadUpdateSchema = z.object({
   convertedToCustomerId: z.string().optional().nullable(),
 });
 
-export async function GET(request: Request, { params }: { params: { id: string } }){
+export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }){
     try {
         await requireRole(["admin","dispatcher"]);
         await connectToDb();
+        const {id} = await params;
 
-        const lead = await Lead.findById(params.id).lean();
+        const lead = await Lead.findById(id).lean();
         if(!lead) return NextResponse.json({error:"Lead not found"},{status:404});
 
         return NextResponse.json({lead});
@@ -33,16 +34,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
     }
 };
 
-export async function PUT(request: Request, { params }: { params: { id: string } }){
+export async function PUT(request: Request, { params }:  { params: Promise<{ id: string }> }){
     try {
         await requireRole(["admin","dispatcher"]);
         await connectToDb();
+
+        const {id} = await params;
         
         const body = await request.json();
 
         const parsed = LeadUpdateSchema.parse(body);
 
-        const lead = await Lead.findByIdAndUpdate(params.id,parsed,{new:true});
+        const lead = await Lead.findByIdAndUpdate(id,parsed,{new:true});
 
         if(!lead) return NextResponse.json({error:"lead not found"}, {status:404});
         return NextResponse.json({lead});
@@ -55,11 +58,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }
 };
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
     await requireRole(["admin"]);
     await connectToDb();
-    const deleted = await Lead.findByIdAndDelete(params.id);
+
+    const {id} = await params;
+    const deleted = await Lead.findByIdAndDelete(id);
     if (!deleted) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err: any) {

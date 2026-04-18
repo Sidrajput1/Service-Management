@@ -15,11 +15,11 @@ const UpdateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function GET(_: Request, { params }: { params: { id: string } }){
+export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }){
     try {
         await connectToDb();
-
-        const item = await PriceItem.findById(params.id).lean();
+        const {id} = await params;
+        const item = await PriceItem.findById(id).lean();
 
         if(!item){
             return NextResponse.json({
@@ -34,16 +34,16 @@ export async function GET(_: Request, { params }: { params: { id: string } }){
     }
 };
 
-export async function PUT(request:Request,{params}:{params:{id:String}}){
+export async function PUT(request: Request, { params }:  { params: Promise<{ id: string }> }){
     try {
         await requireRole(["admin","dispatcher"]);
         await connectToDb();
-
+        const {id} = await params;
         const body = await request.json();
 
         const parsed = UpdateSchema.parse(body);
 
-        const item = await PriceItem.findByIdAndUpdate(params.id , parsed , {new:true});
+        const item = await PriceItem.findByIdAndUpdate(id , parsed , {new:true});
 
         if(!item){
             return NextResponse.json({error:"price item not found"},{status:404});
@@ -66,12 +66,13 @@ export async function PUT(request:Request,{params}:{params:{id:String}}){
 
 // for delete
 
-export async function DELETE(_:Request,{params}:{params:{id:string}}){
+export async function DELETE(_: Request, { params }:  { params: Promise<{ id: string }> }){
     try {
         await requireRole(["admin","dispatcher"]);
         await connectToDb();
 
-        const item = await PriceItem.findByIdAndDelete(params.id);
+        const {id} = await params;
+        const item = await PriceItem.findByIdAndDelete(id);
 
          if(!item){
             return NextResponse.json({error:"price item not found"},{status:404});

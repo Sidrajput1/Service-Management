@@ -54,8 +54,7 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+  { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectToDb();
     const user = await requireCurrentUser();
