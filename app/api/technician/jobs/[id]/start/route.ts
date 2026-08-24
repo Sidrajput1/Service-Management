@@ -6,8 +6,9 @@ import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
 import Booking from "@/models/booking";
-import { notifyJobStatus } from "@/lib/notify-events";
+import { notifyCustomerOtpVerified, notifyJobStatus } from "@/lib/notify-events";
 import "@/models/customer";
+import { getJobNotificationRecipients } from "@/lib/notification-recipents";
 
 const StartSchema = z.object({
   otp: z.string().min(4, "OTP is required"),
@@ -57,16 +58,37 @@ export async function POST(
     );
     const customer = booking?.customerId as any;
 
-    await notifyJobStatus({
-      customerUserId: customer?.userId ? String(customer.userId) : undefined,
-      jobId: job._id.toString(),
-      bookingId: String(job.bookingId),
-      title: "Service started",
-      message: "Your service work has started",
-    });
-    job.customerOtpVerifiedAt = new Date();
-    job.startTime = new Date();
+    // await notifyJobStatus({
+    //   customerUserId: customer?.userId ? String(customer.userId) : undefined,
+    //   jobId: job._id.toString(),
+    //   bookingId: String(job.bookingId),
+    //   title: "Service started",
+    //   message: "Your service work has started",
+    // });
+    // job.customerOtpVerifiedAt = new Date();
+    // job.startTime = new Date();
     await job.save();
+
+    //-----------------------------------------------
+    // notify customer - service started or vefified
+    //-----------------------------------------------
+
+    const recipients =
+  await getJobNotificationRecipients(
+    job._id.toString(),
+  );
+
+await notifyCustomerOtpVerified({
+  customerUserId:
+    recipients.customerUserId!,
+
+  jobId:
+    job._id.toString(),
+
+  bookingId:
+    job.bookingId.toString(),
+});
+//----------------------------------------------------
 
     return NextResponse.json({ job });
   } catch (err: any) {

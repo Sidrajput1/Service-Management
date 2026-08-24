@@ -15,13 +15,37 @@ export function useCustomerMe(){
 
 
 export function useCustomerDashboard(){
+    // return useQuery({
+    //     queryKey:["customer-dashboard"],
+    //     queryFn:async () => {
+    //         const {data} = await api.get("/customer/dashboard");
+    //         return data;
+    //     },
+    //     staleTime:0,
+    //     refetchOnMount:"always",
+    //     refetchOnWindowFocus:true,
+    // });
+
     return useQuery({
-        queryKey:["customer-dashboard"],
-        queryFn:async () => {
-            const {data} = await api.get("/customer/dashboard");
-            return data;
-        }
-    })
+    queryKey: [
+      "customer-dashboard",
+    ],
+
+    queryFn: async () => {
+      const { data } =
+        await api.get(
+          "/customer/dashboard",
+        );
+
+      return data;
+    },
+
+    refetchInterval:
+      30000,
+
+    refetchOnWindowFocus:
+      true,
+  });
 };
 
 export function useCreateCustomerRequest(){

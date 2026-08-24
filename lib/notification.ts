@@ -4,7 +4,7 @@ import User from "@/models/user";
 
 type CreateNotificationInput = {
   recipientUserId?: string;
-  recipientRole?: "admin" | "dispatcher" | "technician" | "customer";
+  recipientRole?: "admin" | "dispatcher" | "technician" | "customer" | "service_provider";
   title: string;
   message: string;
   type: "lead" | "booking" | "job" | "invoice" | "payment" | "profile" | "system";
@@ -34,7 +34,7 @@ export async function createNotification(input:CreateNotificationInput){
 };
 
 export async function createNotificationForRole(
-    role:"admin" | "dispatcher" | "technician" | "customer",
+    role:"admin" | "dispatcher" | "technician" | "customer" | "service_provider",
     input:Omit<CreateNotificationInput, "recipientRole" | "recipientUserId">
 ){
     await connectToDb();

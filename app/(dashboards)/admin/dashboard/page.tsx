@@ -56,9 +56,9 @@ function StatCard({ label, value, change, icon: Icon }: any) {
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm text-slate-500">{label}</p>
+            <p className="text-sm dark:text-accent">{label}</p>
             <div className="mt-2 flex items-end gap-3">
-              <h3 className="text-2xl font-semibold tracking-tight text-slate-900">
+              <h3 className="text-2xl font-semibold tracking-tight text-foreground">
                 {value}
               </h3>
               <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600">
@@ -66,7 +66,7 @@ function StatCard({ label, value, change, icon: Icon }: any) {
               </span>
             </div>
           </div>
-          <div className="rounded-2xl bg-slate-900 p-3 text-white shadow-lg shadow-slate-900/20">
+          <div className="rounded-2xl bg-teal-900 p-3 text-white shadow-lg shadow-slate-900/20">
             <Icon className="h-5 w-5" />
           </div>
         </div>
@@ -77,7 +77,7 @@ function StatCard({ label, value, change, icon: Icon }: any) {
 
 function AdminDashboard() {
     return (
-  <div className="">
+  <div className="bg-background ">
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {adminStats.map((stat) => (
@@ -102,14 +102,14 @@ function AdminDashboard() {
             return (
               <div
                 key={item.label}
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                className="flex items-center justify-between rounded-2xl border border-slate-200 dark:bg-accent-foreground px-4 py-3"
               >
                 <div className="flex items-center gap-3">
-                  <div className="rounded-2xl bg-white p-2 shadow-sm">
-                    <Icon className="h-4 w-4 text-slate-700" />
+                  <div className="rounded-2xl dark:bg-sidebar-accent-foreground p-2 shadow-sm">
+                    <Icon className="h-4 w-4 text-foreground" />
                   </div>
                   <div>
-                    <div className="text-sm font-medium text-slate-900">
+                    <div className="text-sm font-medium dark:text-shadow-sidebar-accent-foreground">
                       {item.label}
                     </div>
                     <div className="text-xs text-slate-500">Live status</div>

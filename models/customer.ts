@@ -55,7 +55,7 @@ const CustomerSchema = new Schema<ICustomer>(
   { timestamps: true },
 );
 
-export const Customer: Model<ICustomer> =
+const Customer: Model<ICustomer> =
   mongoose.models.Customer ||
   mongoose.model<ICustomer>("Customer", CustomerSchema);
 export default Customer;

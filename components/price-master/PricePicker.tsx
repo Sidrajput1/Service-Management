@@ -34,7 +34,7 @@ export default function PricePicker({
     <div className="sapce-y-2">
       <Label>{label}</Label>
       <select
-        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
+        className="w-full rounded-xl border border-slate-200 bg-background px-3 py-2"
         value={value || ""}
         onChange={(e) => {
           const selected =

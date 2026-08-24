@@ -16,11 +16,17 @@ const UserSchema = new mongoose.Schema(
   //   metadata: { type: Schema.Types.Mixed },
   // },
   // { timestamps: true },
-  name: String,
+  name: {
+    type:String,
+    trim:true,
+  },
   email: {
     type: String,
     unique: true,
-    required: true
+    sparse:true,
+    lowercase:true,
+    required: true,
+    trim:true,
   },
   password: {
     type: String,
@@ -28,13 +34,26 @@ const UserSchema = new mongoose.Schema(
   },
   role: {
     type: String,
-    enum: ["admin","dispatcher","technician","customer"],
+    ////enum: ["admin","dispatcher","technician","customer"],
+    enum: [
+        "admin",
+        "dispatcher",
+        "service_provider",
+        "technician",
+        "customer",
+      ],
     default: "customer"
   },
   phone: {
     type:String,
-    required:true,
-  }
+    required:false,
+    trim:true,
+    default:null
+  },
+  isActive: {
+      type: Boolean,
+      default: true,
+    },
 },
 { timestamps: true }
 );

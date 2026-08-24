@@ -31,6 +31,38 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     invoice.status = invoice.balanceDue === 0 ? "paid" : "issued";
     invoice.issuedAt = invoice.issuedAt || new Date();
     invoice.finalizedAt = new Date();
+//     const paidAmount =
+//   Number(
+//     payment.amount,
+//   ) / 100;
+
+// invoice.amountPaid =
+//   paidAmount;
+
+// invoice.balanceDue =
+//   Math.max(
+//     0,
+//     Number(
+//       invoice.grandTotal,
+//     ) -
+//       paidAmount,
+//   );
+
+// invoice.paymentMethod =
+//   payment.method || "";
+
+// invoice.razorpayPaymentId =
+//   payment.id;
+
+// invoice.paymentReceivedAt =
+//   new Date();
+
+// invoice.status =
+//   invoice.balanceDue <= 0
+//     ? "paid"
+//     : "partial";
+
+//await invoice.save();
 
     await invoice.save();
 
@@ -39,6 +71,23 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       job.paymentStatus = invoice.balanceDue === 0 ? "paid" : "pending";
       await job.save();
     }
+//     const job = await Job.findByIdAndUpdate(
+//   invoice.jobId,
+//   {
+//     paymentStatus:
+//       invoice.status === "paid"
+//         ? "paid"
+//         : "partial",
+
+//     paymentReceivedAt:
+//       invoice.status === "paid"
+//         ? new Date()
+//         : undefined,
+
+//     paymentMethod:
+//       payment.method,
+//   },
+// );
 
     return NextResponse.json({ invoice });
   } catch (err: any) {

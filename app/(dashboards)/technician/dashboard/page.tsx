@@ -1,4 +1,5 @@
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import NewTechDash from '@/components/technicians/NewTechDash';
 import TechDash from '@/components/technicians/TechDash';
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation';
@@ -11,7 +12,8 @@ export default async function page() {
     redirect("/signin");
   }
   return (
-    <TechDash session={session}/>
+    // <TechDash session={session}/>
+    <NewTechDash session={session}/>
   )
 }
 

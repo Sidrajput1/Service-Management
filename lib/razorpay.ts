@@ -125,3 +125,12 @@ export function verifyWebhookSignature(params: {
 
   return expected === params.signature;
 }
+
+export async function getRazorpayPayment(
+  paymentId: string,
+) {
+  return razorpayRequest<any>(
+    `/payments/${paymentId}`,
+    "GET",
+  );
+}

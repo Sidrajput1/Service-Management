@@ -5,8 +5,11 @@ export function getRoleHome(role?:string | null){
             return "/admin/dashboard"
         case "technician":
             return "/technician/dashboard"
+        case "service_provider":
+            return "/service-provider";
         case "customer":
-            default:
             return "/customer"
+        default:
+            return "/profile/complete";
     }
 }

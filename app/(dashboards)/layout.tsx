@@ -2,6 +2,9 @@
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import {
+  BarChart3,
+  Bell,
+  BriefcaseBusiness,
   CalendarDays,
   ClipboardList,
   Clock3,
@@ -10,9 +13,12 @@ import {
   Gauge,
   Home,
   Layers3,
+  LayoutDashboard,
   LineChart,
+  MapPin,
   MapPinned,
   MessageSquareMore,
+  Settings,
   ShieldCheck,
   Users,
   Wrench,
@@ -32,7 +38,7 @@ const adminSidebar = [
   { label: "Manage Technicians", icon: "wrench", link: "/admin/manage-technicians" },
    { label: "Monitor Technicians ", icon: "wrench", link: "/admin/manage-technicians/monitor" },
   { label: "Customers", icon: "users", link: "/admin/customers" },
-  { label: "Payments", icon: "card", link: "/admin/payments" },
+  { label: "Payments", icon: "card", link: "/admin/billing" },
   {label:"Price Master",icon:"BadgePercent",link:"/admin/pricemaster"},
   { label: "AMC Plans", icon: "layers", link: "/admin/amc-plans" },
   { label: "Reports", icon: "chart", link: "/admin/analytics" },
@@ -49,19 +55,97 @@ const techSidebar = [
   { label: "My Jobs", icon: "clipboard", link: "/technician/all-jobs" },
   { label: "Live Location", icon: "map", link: "/technician/live-location" },
   { label: "Attendance", icon: "clock", link: "/technician/attendance" },
-  { label: "Earnings", icon: "IndianRupee", link: "/technician/earnings" },
+  // { label: "Earnings", icon: "IndianRupee", link: "/technician/earnings" },
   { label: "Messages", icon: "MessageCircle", link: "/technician/chats" },
-  { label: "Profile", icon: "users", link: "/technician/profile" },
+  // { label: "Profile", icon: "users", link: "/technician/profile" },
   { label: "Support", icon: "shield", link: "/technician/support" },
 ];
 
 const customerSidebar = [
   { label: "Dashboard", icon: "home", active: true, link: "/customer" },
-  { label: "Bookings", icon: "calendar", link: "/customer/bookings" },
-  { label: "Book Service", icon: "calendar", link: "/customer/book-service" },
-  { label: "Jobs", icon: "clipboard", link: "/customer/jobs" },
-  { label: "invoice", icon: "Inbox", link: "/customer/invoice" },
+  {label:"Search Service",icon:"search",active:true,link:"/customer/services"},
+  { label: "My Bookings", icon: "calendar", link: "/customer/bookings" },
+  // { label: "Book Service", icon: "calendar", link: "/customer/book-service" },
+  // { label: "Jobs", icon: "clipboard", link: "/customer/jobs" },
+  { label: "Payment&Invoice", icon: "Inbox", link: "/customer/invoice" },
 ];
+
+// adding service-provider sidebar
+
+const providerSidebar = [
+  {
+    label: "Overview",
+    link: "/service-provider",
+    icon: "LayoutDashboard",
+  },
+
+  {
+    label: "Booking Requests",
+    link: "/service-provider/booking-requests",
+    icon: "calendar",
+  },
+
+  {
+    label: "Bookings",
+    link: "/service-provider/bookings",
+    icon: "BriefcaseBusiness",
+  },
+
+  {
+    label: "Assigned Jobs",
+    link: "/service-provider/assigned-jobs",
+    icon: "wrench",
+  },
+
+  {
+    label: "Technicians",
+    link: "/service-provider/manage-technicians",
+    icon: "users",
+  },
+
+  {
+    label: "Customers",
+    link: "/service-provider/customers",
+    icon: "users",
+  },
+
+  {
+    label: "Services & Pricing",
+    link: "/service-provider/services",
+    icon: "card",
+  },
+
+  {
+    label: "Service Areas",
+    link: "/provider-services-areas",
+    icon: "map",
+  },
+
+  {
+    label: "Invoices",
+    link: "/service-provider/invoices",
+    icon: "card",
+  },
+
+  {
+    label: "Finance",
+    link: "/service-provider/finance",
+    icon: "BarChart3",
+  },
+
+  {
+    label: "Notifications",
+    link: "/service-provider/notifications",
+    icon: "Bell",
+  },
+
+  // {
+  //   label: "Settings",
+  //   link: "/service-provider/settings",
+  //   icon: "Settings",
+  // },
+
+]
 
 function getSidebarByRole(role: string | undefined) {
   if (role === "admin") {
@@ -69,7 +153,7 @@ function getSidebarByRole(role: string | undefined) {
       items: adminSidebar,
       title: "Service Admin",
       subtitle: "Operation Center",
-      accent: "from-blue-600 via-indigo-600 to-cyan-500",
+      accent: "from-slate-600 via-slate-600 to-teal-500",
     };
   }
   if (role === "technician") {
@@ -77,7 +161,7 @@ function getSidebarByRole(role: string | undefined) {
       items: techSidebar,
       title: "Technician App",
       subtitle: "Field Work Area",
-      accent: "from-emerald-600 via-teal-600 to-cyan-500",
+      accent: "from-slate-600 via-teal-600 to-cyan-500",
     };
   }
   if (role === "customer") {
@@ -85,8 +169,17 @@ function getSidebarByRole(role: string | undefined) {
       items: customerSidebar,
       title: "Customer Portal",
       subtitle: "Your Services",
-      accent: "from-violet-600 via-fuchsia-600 to-indigo-500",
+      accent: "from-teal-800 via-slate-900 to-brown-300",
     };
+  }
+  // check if role = service_provider
+  if(role === "service_provider"){
+    return {
+      items:providerSidebar,
+      title:"Service Provider",
+      subtitle:"Provider Center",
+      accent: "from-pink-500 via-red-400 to-pink-600"
+    }
   }
   return {
     items: [],
@@ -112,91 +205,14 @@ export default async function DashboardLayout({
   }
   const role = (session.user as any)?.role as "admin" | "technician" | "customer" | undefined;
 
-  // const items =
-  //   role === "admin" ? adminSidebar : techSidebar;
-
-  // let sidebarItems: typeof adminSidebar;
-  // let sidebarTitle: string;
-  // let sidebarSubtitle: string;
-
-  // if (role === "admin") {
-  //   sidebarItems = adminSidebar;
-  //   sidebarTitle = "Service admin";
-  //   sidebarSubtitle = "Operation Center";
-  // } else if (role === "technician") {
-  //   sidebarItems = techSidebar;
-  //   sidebarTitle = "Technician App";
-  //   sidebarSubtitle = "Field work area";
-  // } else if (role === "customer") {
-  //   sidebarItems = customerSidebar;
-  //   sidebarTitle = "Customer Portal";
-  //   sidebarSubtitle = "Your Services";
-  // } else {
-  //   sidebarItems = [];
-  //   sidebarTitle = "App";
-  //   sidebarSubtitle = "Welcome";
-  // }
+  
 
   const sidebar = getSidebarByRole(role);
 
   return (
-  //   <div className=" min-h-screen bg-slate-50 text-slate-900">
-  //     {/* Sidebar (desktop) */}
-  //     {/* <div className="hidden md:block w-64">
-  //       <Sidebar
-  //         //items={role === "admin" ? adminSidebar : techSidebar}
-  //         // items={role === "admin" ? adminSidebar : techSidebar}
-  //         //items={adminSidebar}
-  //         // title={role === "admin" ? "Service Admin" : "Technician App"}
-  //         //subtitle={role === "admin" ? "Operations center" : "Field work area"}
-  //         items={sidebarItems}
-  //         title={sidebarTitle}
-  //         subtitle={sidebarSubtitle}
-  //       />
-  //     </div> */}
-
-  //      <aside className="hidden lg:block lg:w-72 xl:w-80 lg:shrink-0">
-  //         <Sidebar
-  //           role={role}
-  //           items={sidebar.items}
-  //           title={sidebar.title}
-  //           subtitle={sidebar.subtitle}
-  //           accent={sidebar.accent}
-  //         />
-  //       </aside>
-
-  //     {/* Main Content */}
-  //     <div className="flex min-w-0 flex-1 flex-col">
-  //       {/* Header */}
-  //       {/* <Header role={role} /> */}
-  //       {/* <Topbar role={role} /> */}
-  //       <Topbar
-  //           role={role}
-  //           userName={session.user?.name || "User"}
-  //           userEmail={session.user?.email || ""}
-  //           sidebarItems={sidebar.items}
-  //           sidebarTitle={sidebar.title}
-  //           sidebarSubtitle={sidebar.subtitle}
-  //           sidebarAccent={sidebar.accent}
-  //         />
-
-  //       {/* Page Content */}
-  //       <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6 ">
-  //         <div className="mx-auto max-w-7xl  space-y-6">
-  //         {children}
-  //         </div>
-  //         {/* <ChatWindow
-  //       conversationId={123}
-  //       currentUserId={session.user.id}
-  // currentUserRole={session.user.role}
-  // currentUserName={session.user.name}
-  //     /> */}
-  //         {/* <TechDashWrapper session={session} /> */}
-  //       </main>
-  //     </div>
-  //   </div>
-   <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="flex min-h-screen">
+  
+   <div className="h-screen bg-background text-foreground  overflow-hidden"> 
+      <div className="flex h-screen overflow-hidden">
         {/* Desktop Sidebar */}
         <aside className="hidden lg:block lg:w-72 xl:w-80 lg:shrink-0">
           <Sidebar
@@ -209,7 +225,7 @@ export default async function DashboardLayout({
         </aside>
 
         {/* Main Area */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden" >
           <Topbar
             role={role}
             userName={session.user?.name || "User"}
@@ -220,7 +236,7 @@ export default async function DashboardLayout({
             sidebarAccent={sidebar.accent}
           />
 
-          <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+          <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6 overflow-y-auto ">
             <div className="mx-auto max-w-7xl space-y-6">{children}</div>
           </main>
         </div>

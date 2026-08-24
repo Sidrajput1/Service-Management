@@ -18,13 +18,13 @@ function ChatBtn({
       onClick={() => onSelect(job._id)}
       className={`w-full rounded-2xl border p-4 text-left transition ${
         active
-          ? "border-slate-900 bg-slate-950 text-white"
+          ? "border-slate-900 bg-slate-50 text-white"
           : "border-slate-200 bg-white hover:bg-slate-50"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-medium">
+          <div className="font-medium text-foreground dark:text-background">
             {job.bookingId?.serviceType || "Service job"}
           </div>
 

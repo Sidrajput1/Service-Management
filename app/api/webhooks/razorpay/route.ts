@@ -44,93 +44,387 @@ function pickMethod(payload: any) {
   return payload?.payment?.entity?.method || "razorpay";
 }
 
-export async function POST(request: Request) {
+// export async function POST(request: Request) {
+//   try {
+//     await connectToDb();
+
+//     const rawBody = await request.text();
+//     const signature = request.headers.get("x-razorpay-signature") || "";
+//     const eventId = request.headers.get("x-razorpay-event-id") || "";
+
+//     if (!signature) {
+//       return NextResponse.json({ error: "Missing webhook signature" }, { status: 400 });
+//     }
+
+//     const valid = verifyWebhookSignature({ rawBody, signature });
+//     if (!valid) {
+//       return NextResponse.json({ error: "Invalid webhook signature" }, { status: 400 });
+//     }
+
+//     const payload = JSON.parse(rawBody);
+
+//     console.log("Received Razorpay webhook:", {
+//       event: payload?.event,
+//       paymentId: pickPaymentId(payload),
+//     }
+//     );
+//     const eventName = payload?.event || "unknown";
+
+//     // Deduplicate webhook retries
+//     if (eventId) {
+//       const already = await WebhookEvent.findOne({ eventId });
+//       if (already) {
+//         return NextResponse.json({ ok: true, duplicate: true });
+//       }
+//     }
+
+//     const isPaymentSuccess =
+//       eventName === "payment.captured" ||
+//       eventName === "order.paid" ||
+//       eventName === "payment_link.paid";
+
+//     if (eventId) {
+//       await WebhookEvent.create({
+//         provider: "razorpay",
+//         eventId,
+//         eventName,
+//         payload,
+//         status: isPaymentSuccess ? "processed" : "ignored",
+//       });
+//     }
+
+//     if (!isPaymentSuccess) {
+//       return NextResponse.json({ ok: true, ignored: true });
+//     }
+
+//     const invoiceId = pickInvoiceId(payload);
+//     const orderId = pickOrderId(payload);
+//     const paymentId = pickPaymentId(payload);
+//     const paymentLinkId = pickPaymentLinkId(payload);
+//     const amountPaise = pickAmountPaise(payload);
+//     const method = pickMethod(payload);
+
+//     const invoice =
+//       (invoiceId && (await Invoice.findById(invoiceId))) ||
+//       (orderId && (await Invoice.findOne({ razorpayOrderId: orderId }))) ||
+//       (paymentLinkId && (await Invoice.findOne({ razorpayPaymentLinkId: paymentLinkId })));
+
+//     if (!invoice) {
+//       return NextResponse.json({ ok: true, warning: "Invoice not found" });
+//     }
+
+//     const result = await finalizeSuccessfulRazorpayPayment({
+//       invoiceId: invoice._id.toString(),
+//       orderId: orderId || undefined,
+//       paymentId: paymentId || undefined,
+//       paymentLinkId: paymentLinkId || undefined,
+//       amountPaise: amountPaise || Math.round(Number(invoice.balanceDue || invoice.grandTotal || 0) * 100),
+//       method,
+//       source: "web",
+//       rawPayload: payload,
+//     });
+
+//     return NextResponse.json({
+//       ok: true,
+//       invoiceId: result.invoice._id,
+//       paymentId: result.payment?._id,
+//       duplicate: result.duplicate || false,
+//     });
+//   } catch (err: any) {
+//     return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+//   }
+// }
+
+// new webhook implemented based on updated verify route of razorpay
+
+
+export async function POST(
+  request: Request,
+) {
   try {
     await connectToDb();
 
-    const rawBody = await request.text();
-    const signature = request.headers.get("x-razorpay-signature") || "";
-    const eventId = request.headers.get("x-razorpay-event-id") || "";
+    /*
+     * IMPORTANT:
+     *
+     * Verify the raw request body before JSON parsing.
+     */
+    const rawBody =
+      await request.text();
+
+    const signature =
+      request.headers.get(
+        "x-razorpay-signature",
+      ) || "";
+
+    const eventId =
+      request.headers.get(
+        "x-razorpay-event-id",
+      ) || "";
 
     if (!signature) {
-      return NextResponse.json({ error: "Missing webhook signature" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "Missing webhook signature",
+        },
+        {
+          status: 400,
+        },
+      );
     }
 
-    const valid = verifyWebhookSignature({ rawBody, signature });
+    const valid =
+      verifyWebhookSignature({
+        rawBody,
+        signature,
+      });
+
     if (!valid) {
-      return NextResponse.json({ error: "Invalid webhook signature" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            "Invalid webhook signature",
+        },
+        {
+          status: 400,
+        },
+      );
     }
 
-    const payload = JSON.parse(rawBody);
+    let payload: any;
 
-    console.log("Received Razorpay webhook:", {
-      event: payload?.event,
-      paymentId: pickPaymentId(payload),
+    try {
+      payload =
+        JSON.parse(
+          rawBody,
+        );
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid JSON payload",
+        },
+        {
+          status: 400,
+        },
+      );
     }
-    );
-    const eventName = payload?.event || "unknown";
 
-    // Deduplicate webhook retries
+    const eventName =
+      payload?.event ||
+      "unknown";
+
+    /*
+     * Deduplicate webhook delivery.
+     */
     if (eventId) {
-      const already = await WebhookEvent.findOne({ eventId });
-      if (already) {
-        return NextResponse.json({ ok: true, duplicate: true });
+      const existing =
+        await WebhookEvent.findOne({
+          eventId,
+        });
+
+      if (existing) {
+        return NextResponse.json({
+          ok: true,
+          duplicate: true,
+        });
       }
     }
 
     const isPaymentSuccess =
-      eventName === "payment.captured" ||
-      eventName === "order.paid" ||
-      eventName === "payment_link.paid";
+      eventName ===
+        "payment.captured" ||
+      eventName ===
+        "order.paid" ||
+      eventName ===
+        "payment_link.paid";
 
+    /*
+     * Record event before processing.
+     */
     if (eventId) {
       await WebhookEvent.create({
-        provider: "razorpay",
+        provider:
+          "razorpay",
+
         eventId,
+
         eventName,
+
         payload,
-        status: isPaymentSuccess ? "processed" : "ignored",
+
+        status:
+          isPaymentSuccess
+            ? "processed"
+            : "ignored",
       });
     }
 
     if (!isPaymentSuccess) {
-      return NextResponse.json({ ok: true, ignored: true });
+      return NextResponse.json({
+        ok: true,
+        ignored: true,
+      });
     }
 
-    const invoiceId = pickInvoiceId(payload);
-    const orderId = pickOrderId(payload);
-    const paymentId = pickPaymentId(payload);
-    const paymentLinkId = pickPaymentLinkId(payload);
-    const amountPaise = pickAmountPaise(payload);
-    const method = pickMethod(payload);
+    const invoiceId =
+      pickInvoiceId(
+        payload,
+      );
 
+    const orderId =
+      pickOrderId(
+        payload,
+      );
+
+    const paymentId =
+      pickPaymentId(
+        payload,
+      );
+
+    const paymentLinkId =
+      pickPaymentLinkId(
+        payload,
+      );
+
+    const amountPaise =
+      Number(
+        pickAmountPaise(
+          payload,
+        ),
+      );
+
+    const method =
+      pickMethod(
+        payload,
+      );
+
+    /*
+     * Find invoice.
+     */
     const invoice =
-      (invoiceId && (await Invoice.findById(invoiceId))) ||
-      (orderId && (await Invoice.findOne({ razorpayOrderId: orderId }))) ||
-      (paymentLinkId && (await Invoice.findOne({ razorpayPaymentLinkId: paymentLinkId })));
+      (invoiceId &&
+        (await Invoice.findById(
+          invoiceId,
+        ))) ||
+      (orderId &&
+        (await Invoice.findOne({
+          razorpayOrderId:
+            orderId,
+        }))) ||
+      (paymentLinkId &&
+        (await Invoice.findOne({
+          razorpayPaymentLinkId:
+            paymentLinkId,
+        })));
 
     if (!invoice) {
-      return NextResponse.json({ ok: true, warning: "Invoice not found" });
+      return NextResponse.json({
+        ok: true,
+
+        warning:
+          "Invoice not found",
+      });
     }
 
-    const result = await finalizeSuccessfulRazorpayPayment({
-      invoiceId: invoice._id.toString(),
-      orderId: orderId || undefined,
-      paymentId: paymentId || undefined,
-      paymentLinkId: paymentLinkId || undefined,
-      amountPaise: amountPaise || Math.round(Number(invoice.balanceDue || invoice.grandTotal || 0) * 100),
-      method,
-      source: "web",
-      rawPayload: payload,
-    });
+    /*
+     * Expected amount from invoice.
+     */
+    const expectedAmountPaise =
+      Math.round(
+        Number(
+          invoice.balanceDue ||
+            0,
+        ) * 100,
+      );
+
+    /*
+     * If webhook contains a payment amount,
+     * it must match invoice balance.
+     */
+    if (
+      amountPaise > 0 &&
+      amountPaise !==
+        expectedAmountPaise
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Webhook payment amount does not match invoice balance",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    /*
+     * Finalize using the same function as
+     * the browser verification path.
+     */
+    const result =
+      await finalizeSuccessfulRazorpayPayment(
+        {
+          invoiceId:
+            invoice._id.toString(),
+
+          orderId:
+            orderId ||
+            undefined,
+
+          paymentId:
+            paymentId ||
+            undefined,
+
+          paymentLinkId:
+            paymentLinkId ||
+            undefined,
+
+          paidAmountPaise:
+            amountPaise,
+
+          expectedAmountPaise,
+
+          method,
+
+          source:
+            "webhook",
+
+          rawPayload:
+            payload,
+        },
+      );
 
     return NextResponse.json({
       ok: true,
-      invoiceId: result.invoice._id,
-      paymentId: result.payment?._id,
-      duplicate: result.duplicate || false,
+
+      invoiceId:
+        result.invoice._id,
+
+      paymentId:
+        result.payment?._id ||
+        null,
+
+      duplicate:
+        result.duplicate ||
+        false,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+    console.error(
+      "Razorpay webhook error:",
+      err,
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          err.message ||
+          "Server error",
+      },
+      {
+        status: 500,
+      },
+    );
   }
 }

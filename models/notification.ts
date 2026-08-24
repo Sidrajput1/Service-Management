@@ -29,7 +29,7 @@ export type NotificationChannel = "in_app" | "email" | "sms" | "whatsapp";
 
 export interface INotification extends Document {
   recipientUserId?: mongoose.Types.ObjectId;
-  recipientRole?: "admin" | "dispatcher" | "technician" | "customer";
+  recipientRole?: "admin" | "dispatcher" | "technician" | "customer" | "service_provider";
   title: string;
   message: string;
   type:
@@ -56,7 +56,7 @@ const NotificationSchema = new Schema<INotification>(
     recipientUserId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     recipientRole: {
       type: String,
-      enum: ["admin", "dispatcher", "technician", "customer"],
+      enum: ["admin", "dispatcher", "technician", "customer","service_provider"],
       index: true,
     },
 

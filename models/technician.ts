@@ -3,6 +3,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface ITechnician extends Document {
   userId: mongoose.Types.ObjectId; // link to User model
+  serviceProviderId: mongoose.Types.ObjectId;
   skills: string[]; // e.g. ["ac", "plumbing"]
   vehicleType?: string;
   status: "offline" | "available" | "busy" | "on_leave";
@@ -31,6 +32,11 @@ export interface ITechnician extends Document {
 const TechnicianSchema = new Schema<ITechnician>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    serviceProviderId: {
+  type: Schema.Types.ObjectId,
+  ref: "ServiceProvider",
+  required: true,
+},
     skills: { type: [String], default: [] },
     vehicleType: String,
     status: { type: String, enum: ["offline", "available", "busy", "on_leave"], default: "offline" },
@@ -60,6 +66,10 @@ const TechnicianSchema = new Schema<ITechnician>(
 
 TechnicianSchema.index({ "currentLocation": "2dsphere" });
 TechnicianSchema.index({ lastCompletedWorkLocation: "2dsphere" });
+TechnicianSchema.index({
+  serviceProviderId: 1,
+  status: 1,
+});
 
 export const Technician: Model<ITechnician> =
   mongoose.models.Technician || mongoose.model<ITechnician>("Technician", TechnicianSchema);

@@ -3,6 +3,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IJob extends Document {
   bookingId: mongoose.Types.ObjectId;
+  serviceProviderId:mongoose.Types.ObjectId;
   technicianId?: mongoose.Types.ObjectId;
   assignedBy?: mongoose.Types.ObjectId;
   invoiceId?: mongoose.Types.ObjectId;
@@ -40,6 +41,13 @@ export interface IJob extends Document {
 const JobSchema = new Schema<IJob>(
   {
     bookingId: { type: Schema.Types.ObjectId, ref: "Booking", required: true },
+    serviceProviderId: {
+      type: Schema.Types.ObjectId,
+      ref: "ServiceProvider",
+      required: true,
+      index: true,
+    },
+
     technicianId: { type: Schema.Types.ObjectId, ref: "Technician" },
     assignedBy: { type: Schema.Types.ObjectId, ref: "User" },
     invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice" },
@@ -81,6 +89,16 @@ const JobSchema = new Schema<IJob>(
   },
   { timestamps: true },
 );
+
+JobSchema.index({
+  serviceProviderId: 1,
+  status: 1,
+});
+
+JobSchema.index({
+  technicianId: 1,
+  status: 1,
+});
 
 export const Job: Model<IJob> =
   mongoose.models.Job || mongoose.model<IJob>("Job", JobSchema);

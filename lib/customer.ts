@@ -1,5 +1,7 @@
 import Customer from "@/models/customer";
 import { ApiAuthError, requireCurrentUser } from "./auth";
+import User from "@/models/user";
+import { connectToDb } from "./db";
 
 
 export async function requireCustomerProfile(){
@@ -25,3 +27,32 @@ export async function requireCustomerProfile(){
 
     return {user , customer}
 };
+
+export async function requireCustomer(userId: string) {
+  await connectToDb();
+
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (user.role !== "customer") {
+    throw new Error("Customer access required");
+  }
+
+  const customer = await Customer.findOne({
+    userId: user._id,
+  });
+
+  if (!customer) {
+    throw new Error(
+      "Customer profile not found"
+    );
+  }
+
+  return {
+    user,
+    customer,
+  };
+}
