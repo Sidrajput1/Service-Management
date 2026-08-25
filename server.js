@@ -68,9 +68,24 @@ app.prepare().then(() => {
     
 
 
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT,(err) => {
-        if(err) throw err;
-        console.log(`> Server is running on http://localhost:${PORT}`);
-    });
+    // const PORT = process.env.PORT || 3000;
+    // server.listen(PORT,(err) => {
+    //     if(err) throw err;
+    //     console.log(`> Server is running on http://localhost:${PORT}`);
+    // });
+
+    //--------------------------
+    // for production 
+    //----------------------------
+
+    const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || "0.0.0.0";
+
+server.listen(PORT, HOST, (err) => {
+  if (err) throw err;
+
+  console.log(
+    `> Servizato server running on ${HOST}:${PORT}`,
+  );
+});
 });

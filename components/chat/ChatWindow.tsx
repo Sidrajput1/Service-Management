@@ -258,8 +258,14 @@ export default function ChatWindow({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (!sending && text.trim()) sendMessage();
+              }
+            }}
             placeholder="Type your message..."
-            className="min-h-20 w-full resize-none bg-transparent text-sm outline-none"
+            className="min-h-20 w-full resize-none bg-transparent text-black text-sm outline-none"
           />
 
           <div className="mt-3 flex justify-end">
