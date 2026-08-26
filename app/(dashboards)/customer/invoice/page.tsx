@@ -344,7 +344,7 @@ function CustomerInvoice() {
                     asChild
                     className="mt-5 rounded-xl"
                   >
-                    <Link href="/customer/discovery">
+                    <Link href="/customer/services">
                       Find a service
                     </Link>
                   </Button>

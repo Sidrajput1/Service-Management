@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import "@/models/technician";
 import { ServiceOffering, ServiceProvider } from "@/models";
 import {PriceItem} from "@/models/PriceItem";
-import { requireCustomer } from "@/lib/customer";
+import { requireCustomer, requireCustomerProfile } from "@/lib/customer";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 
@@ -118,7 +118,9 @@ export async function GET() {
 
     await connectToDb();
 
-    const { customer } = await requireCustomer(session.user.id);
+    //const { customer } = await requireCustomer(session.user.id);
+
+    const {customer} = await requireCustomerProfile();
 
     /*
      * ------------------------------------------------

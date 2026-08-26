@@ -98,7 +98,7 @@ const demoRoles: DemoRole[] = [
     description:
       "Explore the technician workflow from accepting a job to arrival, OTP verification, parts, proof submission, completion, and payment status.",
     email: "demo.technician@servizato.in",
-    password: "Demo@123456",
+    password: "0899c02b9982",
     icon: Wrench,
     accent: "blue",
     loginPath: "/signin",

@@ -276,7 +276,7 @@ export default function ServiceProviderDashboard(){
           value={`${stats.availableTechnicians}/${stats.technicians}`}
           subtle="Available now"
           icon={Users}
-          href="/service-provider/technicians"
+          href="/service-provider/manage-technicians"
         />
 
         <StatCard
@@ -284,7 +284,7 @@ export default function ServiceProviderDashboard(){
           value={currency(stats.revenue)}
           subtle={`${stats.completedJobs} jobs completed`}
           icon={IndianRupee}
-          href="/service-provider/invoices"
+          href="/service-provider/finance/invoices"
         />
 
       </div>
@@ -649,7 +649,7 @@ export default function ServiceProviderDashboard(){
               className="rounded-xl"
             >
               <Link
-                href="/service-provider/invoices"
+                href="/service-provider/finance/invoices"
               >
                 View all
               </Link>
@@ -747,7 +747,7 @@ export default function ServiceProviderDashboard(){
             className="h-auto justify-start rounded-2xl p-4"
           >
             <Link
-              href="/service-provider/technicians"
+              href="/service-provider/manage-technicians"
             >
               <Users className="mr-3 h-4 w-4" />
 

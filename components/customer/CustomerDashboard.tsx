@@ -592,7 +592,7 @@ export default function CustomerDashboardPage({session}:any) {
                 asChild
                 className="mt-4 rounded-xl"
               >
-                <Link href="/customer/discovery">
+                <Link href="/customer/services">
                   Find a service
                 </Link>
               </Button>
