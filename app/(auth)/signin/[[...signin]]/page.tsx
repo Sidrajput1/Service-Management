@@ -8,13 +8,33 @@ import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from 'framer-motion';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, Info, Lock, Mail, Phone, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { motion } from "framer-motion";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Info,
+  Lock,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Sparkles,
+  Zap,
+} from "lucide-react";
 import { LoginInput } from "@/components/ui/login-input";
 
 function SignIn() {
@@ -25,7 +45,7 @@ function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [showPassword,setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [phone, setPhone] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -57,14 +77,14 @@ function SignIn() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   // gotr goole auth
 
   async function handleGoogle() {
     // redirect handled by next-auth
     await signIn("google", { callbackUrl: "/profile/complete" });
-  };
+  }
 
   // Send OTP
   async function sendOtp() {
@@ -87,7 +107,7 @@ function SignIn() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   async function verifyOtpAndSignIn() {
     setErr(null);
@@ -108,12 +128,9 @@ function SignIn() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-
-
-
     <div className="relative min-h-screen overflow-hidden bg-linear-to-br from-white via-white to-zinc-50">
       <div className="absolute left-1/2 top-0 h-100 w-150 -translate-x-1/2 rounded-full bg-brand-coral/8 blur-[120px]" />
       <div className="absolute right-0 top-1/3 h-75 w-75 rounded-full bg-brand-teal/8 blur-[100px]" />
@@ -121,7 +138,7 @@ function SignIn() {
       <div className="relative flex min-h-screen items-center justify-center p-4">
         <Link
           href="/"
-          className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 text-sm text-muted transition hover:text-secondary-foreground sm:left-6 sm:top-6"
+          className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 text-sm dark:text-muted text-muted-foreground transition hover:text-secondary-foreground sm:left-6 sm:top-6"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to home
@@ -145,35 +162,39 @@ function SignIn() {
                   <Zap className="h-5 w-5 b" fill="currentcolor" />
                 </div>
                 <div className="flex flex-col leading-none ">
-    <span className="font-poppins text-lg font-bold tracking-tight text-white">
-      Servi<span className="text-[#140307]">zato</span>
-    </span>
+                  <span className="font-poppins text-lg font-bold tracking-tight text-white">
+                    Servi<span className="text-[#140307]">zato</span>
+                  </span>
 
-    <span className="mt-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/70">
-      Services Made Simple
-    </span>
-  </div>
+                  <span className="mt-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                    Services Made Simple
+                  </span>
+                </div>
               </div>
 
               <h2 className="mt-10 font-display text-3xl font-bold leading-tight tracking-tight text-balance">
                 The marketplace that runs itself
               </h2>
               <p className="mt-4 text-sm leading-6 text-white/80">
-                Customers find trusted technicians. Providers manage their business.
-                Servfast handles discovery, matching, booking, payments, and reviews.
+                Customers find trusted technicians. Providers manage their
+                business. Servfast handles discovery, matching, booking,
+                payments, and reviews.
               </p>
             </div>
 
             <div className="relative space-y-3.5">
               {[
-                { icon: CheckCircle2, text: 'Smart discovery & matching' },
-                { icon: ShieldCheck, text: 'OTP-verified job workflow' },
-                { icon: Zap, text: 'Automated invoices & payments' },
-                { icon: Sparkles, text: 'Role-based dashboards for everyone' },
+                { icon: CheckCircle2, text: "Smart discovery & matching" },
+                { icon: ShieldCheck, text: "OTP-verified job workflow" },
+                { icon: Zap, text: "Automated invoices & payments" },
+                { icon: Sparkles, text: "Role-based dashboards for everyone" },
               ].map((item) => {
                 const Icon = item.icon;
                 return (
-                  <div key={item.text} className="flex items-center gap-3 text-sm">
+                  <div
+                    key={item.text}
+                    className="flex items-center gap-3 text-sm"
+                  >
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/15 backdrop-blur-sm">
                       <Icon className="h-3.5 w-3.5" />
                     </div>
@@ -185,10 +206,10 @@ function SignIn() {
 
             <div className="relative flex items-center gap-3 border-t border-white/15 pt-6">
               <div className="flex -space-x-2">
-                {['R', 'C', 'A', 'P'].map((initial, i) => (
+                {["R", "B", "A", "C"].map((initial, i) => (
                   <div
                     key={i}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-brand-coral-dark bg-gradient-to-br from-white/30 to-white/10 text-xs font-semibold backdrop-blur-sm"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-brand-coral-dark bg-linear-to-br from-white/30 to-white/10 text-xs font-semibold backdrop-blur-sm"
                   >
                     {initial}
                   </div>
@@ -239,7 +260,10 @@ function SignIn() {
               {/* Email Login */}
               <form onSubmit={onSignIn} className="space-y-4">
                 <div>
-                  <Label htmlFor="email" className="text-sm font-medium text-foreground">
+                  <Label
+                    htmlFor="email"
+                    className="text-sm font-medium dark:text-background text-foreground"
+                  >
                     Email
                   </Label>
                   <div className="relative mt-1.5">
@@ -252,18 +276,21 @@ function SignIn() {
                       className="pl-10 bg-white"
                     /> */}
                     <LoginInput
-  id="email"
-  value={email}
-  onChange={(e) => setEmail(e.target.value)}
-  placeholder="you@company.com"
-  className="pl-10"
-/>
+                      id="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className="pl-10"
+                    />
                   </div>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="text-sm font-medium text-foreground">
+                    <Label
+                      htmlFor="password"
+                      className="text-sm font-medium dark:text-background text-foreground"
+                    >
                       Password
                     </Label>
                     <Link
@@ -284,19 +311,23 @@ function SignIn() {
                       className="pl-10 pr-10"
                     /> */}
                     <LoginInput
-  id="password"
-  type={showPassword ? "text" : "password"}
-  value={password}
-  onChange={(e) => setPassword(e.target.value)}
-  placeholder="••••••••"
-  className="pl-10 pr-10"
-/>
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pl-10 pr-10"
+                    />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -306,7 +337,7 @@ function SignIn() {
                   className="w-full bg-linear-to-r from-brand-coral to-brand-coral-dark text-white shadow-lg shadow-brand-coral/25 transition hover:shadow-xl hover:shadow-brand-coral/40"
                   disabled={loading}
                 >
-                  {loading ? 'Signing in...' : 'Sign in'}
+                  {loading ? "Signing in..." : "Sign in"}
                   {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
                 </Button>
               </form>
@@ -314,7 +345,9 @@ function SignIn() {
               {/* Divider */}
               <div className="my-6 flex items-center gap-3">
                 <div className="h-px flex-1 bg-border" />
-                <span className="text-xs font-medium text-muted-foreground">OR</span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  OR
+                </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
 
@@ -322,7 +355,7 @@ function SignIn() {
               <Button
                 onClick={handleGoogle}
                 variant="link"
-                className="w-full border-border text-foreground  transition hover:bg-accent-foreground"
+                className="w-full border-border dark:text-background text-foreground  transition hover:bg-accent-foreground"
               >
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                   <path
@@ -349,7 +382,7 @@ function SignIn() {
               <div className="mt-6 rounded-2xl border border-border/60 bg-muted/0 p-4">
                 <div className="mb-1 flex items-center gap-2">
                   <Phone className="h-4 w-4 text-brand-teal-dark" />
-                  <Label className="text-sm font-medium text-foreground">
+                  <Label className="text-sm font-medium text-foreground dark:text-background">
                     Sign in with phone
                   </Label>
                 </div>
@@ -366,13 +399,13 @@ function SignIn() {
                     disabled={loading}
                     className="flex-1 bg-linear-to-r from-brand-teal to-brand-teal-dark text-white shadow-lg shadow-brand-teal/25 transition hover:shadow-xl hover:shadow-brand-teal/40"
                   >
-                    {loading ? 'Sending...' : 'Send OTP'}
+                    {loading ? "Sending..." : "Send OTP"}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setPhone('');
-                      setOtp('');
+                      setPhone("");
+                      setOtp("");
                       setOtpSent(false);
                     }}
                   >
@@ -383,7 +416,7 @@ function SignIn() {
                 {otpSent && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
+                    animate={{ opacity: 1, height: "auto" }}
                     transition={{ duration: 0.3 }}
                     className="mt-4 border-t border-border/60 pt-4"
                   >
@@ -401,7 +434,7 @@ function SignIn() {
                       onClick={verifyOtpAndSignIn}
                       disabled={loading}
                     >
-                      {loading ? 'Verifying...' : 'Verify & Sign in'}
+                      {loading ? "Verifying..." : "Verify & Sign in"}
                       {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
                     </Button>
                   </motion.div>
@@ -410,16 +443,22 @@ function SignIn() {
 
               {/* Footer */}
               <p className="mt-6 text-center text-sm text-muted-foreground">
-                New here?{' '}
-                <Link href="/signup" className="font-medium text-brand-coral transition hover:underline">
+                New here?{" "}
+                <Link
+                  href="/signup"
+                  className="font-medium text-brand-coral transition hover:underline"
+                >
                   Create account
                 </Link>
               </p>
 
               <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Zap className="h-4 w-4 text-brand-teal" />
-                Want to explore first?{' '}
-                <Link href="/demo" className="font-medium text-brand-teal-dark transition hover:underline">
+                Want to explore first?{" "}
+                <Link
+                  href="/demo"
+                  className="font-medium text-brand-teal-dark transition hover:underline"
+                >
                   Try the demo
                 </Link>
               </div>
@@ -428,9 +467,9 @@ function SignIn() {
         </motion.div>
       </div>
     </div>
-   
-              )
-{/* <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 via-white to-indigo-50 p-4">
+  );
+  {
+    /* <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 via-white to-indigo-50 p-4">
   <div className="absolute left-1/2 top-0 h-100 w-150 -translate-x-1/2 rounded-full bg-brand-coral/8 blur-[120px]" />
       <div className="absolute right-0 top-1/3 h-75 w-75 rounded-full bg-brand-teal/8 blur-[100px]" />
 
@@ -548,9 +587,8 @@ function SignIn() {
     </div>
   </div>
   </div>
-</div> */}
-
-  
+</div> */
+  }
 }
 
 export default SignIn;

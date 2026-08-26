@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/separator";
 
 import { cn } from "@/lib/utils";
+import { SiteHeader } from "@/components/SiteHeader";
 
 type DemoRole = {
   id: string;
@@ -58,7 +59,7 @@ const demoRoles: DemoRole[] = [
     description:
       "Explore providers, compare prices and offers, request services, track technicians, pay invoices, and leave reviews.",
     email: "demo.customer@servizato.in",
-    password: "Demo@123456",
+    password: "Demo@12345",
     icon: User,
     accent: "coral",
     loginPath: "/signin",
@@ -111,25 +112,25 @@ const demoRoles: DemoRole[] = [
     ],
   },
 
-  {
-    id: "admin",
-    title: "Platform Admin",
-    subtitle: "Manage the marketplace",
-    description:
-      "Explore the administrative side of Servizato including marketplace operations, users, providers, bookings, finance, and platform management.",
-    email: "demo.admin@servizato.in",
-    password: "Demo@123456",
-    icon: Settings2,
-    accent: "violet",
-    loginPath: "/signin",
-    features: [
-      "Marketplace overview",
-      "Provider management",
-      "User management",
-      "Bookings & operations",
-      "Platform controls",
-    ],
-  },
+  // {
+  //   id: "admin",
+  //   title: "Platform Admin",
+  //   subtitle: "Manage the marketplace",
+  //   description:
+  //     "Explore the administrative side of Servizato including marketplace operations, users, providers, bookings, finance, and platform management.",
+  //   email: "demo.admin@servizato.in",
+  //   password: "Demo@123456",
+  //   icon: Settings2,
+  //   accent: "violet",
+  //   loginPath: "/signin",
+  //   features: [
+  //     "Marketplace overview",
+  //     "Provider management",
+  //     "User management",
+  //     "Bookings & operations",
+  //     "Platform controls",
+  //   ],
+  // },
 ];
 
 function getAccentStyles(
@@ -443,7 +444,7 @@ export default function DemoPage() {
 
   return (
     <main className="min-h-screen bg-background">
-
+      <SiteHeader/>
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-border/70">
 
@@ -533,6 +534,89 @@ export default function DemoPage() {
               />
             ),
           )}
+
+          <Card className="overflow-hidden rounded-3xl border-brand-coral/20 bg-linear-to-r from-brand-coral/5 via-card to-brand-teal/5">
+  <CardContent className="p-6 sm:p-8">
+
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+
+      <div className="flex items-start gap-4">
+
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-coral/10 text-brand-coral">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+
+        <div>
+          <Badge className="rounded-full border-brand-coral/20 bg-brand-coral/10 text-brand-coral hover:bg-brand-coral/10">
+            Platform Administration
+          </Badge>
+
+          <h3 className="mt-3 font-poppins text-xl font-semibold text-foreground">
+            Platform Admin access
+          </h3>
+
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Servizato also has a dedicated platform administration
+            layer that manages the overall marketplace infrastructure,
+            providers, users, operations, and platform-level controls.
+          </p>
+
+          <p className="mt-3 text-sm font-medium text-foreground">
+            Admin demo access is available privately.
+          </p>
+
+        </div>
+      </div>
+
+      <div className="w-full lg:max-w-sm">
+        <div className="rounded-2xl border border-border/70 bg-background/80 p-5">
+
+          <p className="text-sm font-semibold text-foreground">
+            Want to see the admin side?
+          </p>
+
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Contact me and I can provide a private walkthrough
+            of the platform administration features.
+          </p>
+
+          <div className="mt-4 space-y-3">
+
+            <a
+              href="tel:6201274925"
+              className="block rounded-xl border border-border bg-card p-3 transition hover:bg-accent/30"
+            >
+              <p className="text-xs text-muted-foreground">
+                Phone
+              </p>
+
+              <p className="mt-1 font-semibold text-foreground">
+                6201274925
+              </p>
+            </a>
+
+            <a
+              href="mailto:YOUR_EMAIL@example.com"
+              className="block rounded-xl border border-border bg-card p-3 transition hover:bg-accent/30"
+            >
+              <p className="text-xs text-muted-foreground">
+                Email
+              </p>
+
+              <p className="mt-1 font-semibold text-brand-coral">
+                shekharsidharth7@gmail.com
+              </p>
+            </a>
+
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+  </CardContent>
+</Card>
 
         </div>
 
