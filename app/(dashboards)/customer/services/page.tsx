@@ -85,6 +85,10 @@ export default function CustomerServiceDiscoveryPage() {
 
   const [description, setDescription] = useState("");
 
+  
+
+  const [errorMessage, setErrorMessage] = useState("");
+
   const services = serviceData?.services || [];
 
   const providers = providerData?.providers || [];
@@ -92,131 +96,145 @@ export default function CustomerServiceDiscoveryPage() {
   console.log("providers data", providers);
 
   useEffect(() => {
-  /*
-   * Case 1:
-   * Dashboard/popular service already gives us
-   * the real PriceItem ID.
-   */
-  if (serviceIdFromUrl) {
-    setSelectedServiceId(
-      serviceIdFromUrl,
-    );
+    /*
+     * Case 1:
+     * Dashboard/popular service already gives us
+     * the real PriceItem ID.
+     */
+    if (serviceIdFromUrl) {
+      setSelectedServiceId(serviceIdFromUrl);
 
-    return;
-  }
+      return;
+    }
 
-  /*
-   * Case 2:
-   * Dashboard search gives us text:
-   *
-   * /customer/services?service=ac
-   *
-   * Resolve that text to a PriceItem.
-   */
-  if (!serviceFromUrl) {
-    return;
-  }
+    /*
+     * Case 2:
+     * Dashboard search gives us text:
+     *
+     * /customer/services?service=ac
+     *
+     * Resolve that text to a PriceItem.
+     */
+    if (!serviceFromUrl) {
+      return;
+    }
 
-  if (servicesLoading) {
-    return;
-  }
+    if (servicesLoading) {
+      return;
+    }
 
-  if (!services.length) {
-    setSelectedServiceId("");
-    return;
-  }
+    if (!services.length) {
+      setSelectedServiceId("");
+      return;
+    }
 
-  const normalizedSearch =
-    serviceFromUrl
-      .trim()
-      .toLowerCase();
+    const normalizedSearch = serviceFromUrl.trim().toLowerCase();
 
-  /*
-   * Prefer an exact match.
-   *
-   * "AC Cleaning"
-   * should select "AC Cleaning"
-   * rather than another "AC..." service.
-   */
-  const exactMatch =
-    services.find(
+    /*
+     * Prefer an exact match.
+     *
+     * "AC Cleaning"
+     * should select "AC Cleaning"
+     * rather than another "AC..." service.
+     */
+    const exactMatch = services.find(
       (service: any) =>
-        String(
-          service.name,
-        )
-          .trim()
-          .toLowerCase() ===
-        normalizedSearch,
-    );
-
-  /*
-   * Otherwise use the first matching
-   * service returned by the search API.
-   *
-   * Example:
-   * "ac" → AC Cleaning / AC Repair
-   *
-   * We use the first best match for now.
-   */
-  const matchedService =
-    exactMatch ||
-    services[0];
-
-  if (matchedService?._id) {
-    setSelectedServiceId(
-      String(
-        matchedService._id,
-      ),
+        String(service.name).trim().toLowerCase() === normalizedSearch,
     );
 
     /*
-     * Convert the URL to the canonical form.
+     * Otherwise use the first matching
+     * service returned by the search API.
      *
      * Example:
-     * /services?service=AC%20Cleaning
+     * "ac" → AC Cleaning / AC Repair
      *
-     * becomes:
-     * /services?serviceId=69d...
-     *
-     * This prevents ambiguity on refresh.
+     * We use the first best match for now.
      */
-    router.replace(
-      `/customer/services?serviceId=${encodeURIComponent(
-        String(
-          matchedService._id,
-        ),
-      )}`,
-    );
-  }
-}, [
-  serviceFromUrl,
-  serviceIdFromUrl,
-  services,
-  servicesLoading,
-  router,
-]);
+    const matchedService = exactMatch || services[0];
+
+    if (matchedService?._id) {
+      setSelectedServiceId(String(matchedService._id));
+
+      /*
+       * Convert the URL to the canonical form.
+       *
+       * Example:
+       * /services?service=AC%20Cleaning
+       *
+       * becomes:
+       * /services?serviceId=69d...
+       *
+       * This prevents ambiguity on refresh.
+       */
+      router.replace(
+        `/customer/services?serviceId=${encodeURIComponent(
+          String(matchedService._id),
+        )}`,
+      );
+    }
+  }, [serviceFromUrl, serviceIdFromUrl, services, servicesLoading, router]);
 
   async function handleCreateRequest() {
+    //setErrorMessage(null);
+
+    const cleanAddressLine =
+    addressLine.trim();
+
+  const cleanCity =
+    city.trim();
+
+  const cleanPincode =
+    pincode.trim();
+
+  if (!cleanAddressLine) {
+    toast.error(
+      "Please enter your service address.",
+    );
+    return;
+  }
+
+  if (!cleanCity) {
+    toast.error(
+      "Please enter your city.",
+    );
+    return;
+  }
+
+  if (!cleanPincode) {
+    toast.error(
+      "Please enter your pincode.",
+    );
+    return;
+  }
+
+  if (!/^\d{6}$/.test(cleanPincode)) {
+    toast.error(
+      "Please enter a valid 6-digit pincode.",
+    );
+    return;
+  }
+
     if (!selectedProvider) {
       return;
     }
 
-    if (!addressLine.trim() || !city.trim() || !pincode.trim()) {
-      toast.error("Enter your complete service address");
+    // if (!addressLine.trim() || !city.trim() || !pincode.trim()) {
+    //   toast.error("Enter your complete service address");
 
-      return;
-    }
+    //   return;
+    // }
 
     try {
       const response = await createRequest.mutateAsync({
         serviceOfferingId: selectedProvider.offeringId,
 
         address: {
-          addressLine: addressLine.trim(),
+          addressLine: cleanAddressLine,
 
-          city: city.trim(),
+          city: cleanCity,
 
-          pincode: pincode.trim(),
+          pincode: cleanPincode,
         },
 
         preferredDate: preferredDate || undefined,
@@ -232,6 +250,8 @@ export default function CustomerServiceDiscoveryPage() {
       setPreferredDate("");
       setDescription("");
       setSelectedProvider(null);
+      setCity("");
+    setPincode("");
 
       console.log("Service request:", response);
     } catch (error: any) {
@@ -273,7 +293,11 @@ export default function CustomerServiceDiscoveryPage() {
               <option value="">Select a service</option>
 
               {services.map((service: any) => (
-                <option key={service._id} value={service._id} className="font-semibold">
+                <option
+                  key={service._id}
+                  value={service._id}
+                  className="font-semibold"
+                >
                   {service.name}
                 </option>
               ))}
@@ -490,7 +514,151 @@ export default function CustomerServiceDiscoveryPage() {
       )}
 
       {/* Request dialog */}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="rounded-3xl sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Request service</DialogTitle>
+
+            <DialogDescription>
+              {selectedProvider?.provider?.companyName} ·{" "}
+              {selectedProvider?.service?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProvider && (
+            <div className="space-y-5">
+              {/* Price */}
+              <div className="rounded-2xl bg-muted/40 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm text-muted-foreground">
+                    Estimated price
+                  </span>
+
+                  <span className="text-xl font-semibold text-foreground">
+                    {currency(selectedProvider.pricing.finalPrice)}
+                  </span>
+                </div>
+
+                {selectedProvider.pricing.offerActive && (
+                  <p className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    {selectedProvider.pricing.offerName}
+                  </p>
+                )}
+              </div>
+
+              {/* Address */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-foreground">
+                    Service address
+                  </label>
+
+                  <Input
+                    value={addressLine}
+                    onChange={(event) => setAddressLine(event.target.value)}
+                    placeholder="House number, street, area"
+                    className="mt-2 h-11 rounded-xl bg-background"
+                  />
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Enter the location where the technician should provide the
+                    service.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium text-foreground">
+                      City
+                    </label>
+
+                    <Input
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      placeholder="Patna"
+                      className="mt-2 h-11 rounded-xl bg-background"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-foreground">
+                      Pincode
+                    </label>
+
+                    <Input
+                      value={pincode}
+                      onChange={(event) =>
+                        setPincode(
+                          event.target.value.replace(/\D/g, "").slice(0, 6),
+                        )
+                      }
+                      placeholder="800020"
+                      inputMode="numeric"
+                      maxLength={6}
+                      className="mt-2 h-11 rounded-xl bg-background"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="text-sm font-medium text-foreground">
+                  Preferred date & time
+                </label>
+
+                <Input
+                  type="datetime-local"
+                  value={preferredDate}
+                  onChange={(event) => setPreferredDate(event.target.value)}
+                  className="mt-2 h-11 rounded-xl bg-background"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-sm font-medium text-foreground">
+                  Tell us what you need
+                </label>
+
+                <Textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Describe the problem or any special requirement..."
+                  className="mt-2 min-h-24 rounded-xl bg-background"
+                />
+              </div>
+
+              {/* Error */}
+              {errorMessage && (
+                <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
+                  {errorMessage}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              className="rounded-xl"
+            >
+              Cancel
+            </Button>
+
+            <Button
+              onClick={handleCreateRequest}
+              disabled={createRequest.isPending}
+              className="rounded-xl bg-brand-coral text-white hover:bg-brand-coral-dark"
+            >
+              {createRequest.isPending ? "Sending..." : "Send Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="rounded-3xl sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Request service</DialogTitle>
@@ -578,7 +746,7 @@ export default function CustomerServiceDiscoveryPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
     </div>
   );
 }

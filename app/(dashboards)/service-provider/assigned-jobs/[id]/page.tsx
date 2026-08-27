@@ -921,7 +921,7 @@ export default function ProviderAssignedJobDetailPage() {
                       <Link
                         href={`/service-provider/invoices/${invoice._id}`}
                       >
-                        <FileText className="mr-2 h-4 w-4" />
+                        <FileText className="mr-2 h-4 w-4 inline" />
                         View Invoice
                       </Link>
                     </Button>
@@ -950,7 +950,7 @@ export default function ProviderAssignedJobDetailPage() {
               href={`/service-provider/bookings/${booking._id}`}
             >
               View Booking Details
-              <ChevronRight className="ml-2 h-4 w-4" />
+              <ChevronRight className="ml-2 h-4 w-4 inline" />
             </Link>
           </Button>
         </div>

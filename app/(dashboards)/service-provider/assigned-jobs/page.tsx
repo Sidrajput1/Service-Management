@@ -300,7 +300,7 @@ export default function ProviderAssignedJobsPage() {
               Active now
             </p>
 
-            <p className="mt-1 text-2xl font-semibold">
+            <p className="mt-1 text-2xl font-bold text-center text-brand-coral animate animate-pulse">
               {stats.active}
             </p>
           </div>
@@ -529,7 +529,7 @@ function JobCard({
 
                 <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-slate-950 transition-all duration-500"
+                    className="h-full rounded-full bg-brand-teal transition-all duration-500"
                     style={{
                       width: `${progress}%`,
                     }}
@@ -567,7 +567,7 @@ function JobCard({
                 href={`/service-provider/assigned-jobs/${job._id}`}
               >
                 View Job
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className="ml-2 h-4 w-4 inline" />
               </Link>
             </Button>
           </div>

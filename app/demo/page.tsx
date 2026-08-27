@@ -59,7 +59,7 @@ const demoRoles: DemoRole[] = [
     description:
       "Explore providers, compare prices and offers, request services, track technicians, pay invoices, and leave reviews.",
     email: "demo.customer@servizato.in",
-    password: "Demo@12345",
+    password: "demo@12345",
     icon: User,
     accent: "coral",
     loginPath: "/signin",

@@ -449,7 +449,7 @@ export default function ProviderBookingDetailPage() {
           href={`/service-provider/assigned-jobs/${job._id}`}
         >
           View Assigned Job
-          <ArrowRight className="ml-2 h-4 w-4" />
+          <ArrowRight className="ml-2 h-4 w-4 inline" />
         </Link>
       </Button>
     </div>

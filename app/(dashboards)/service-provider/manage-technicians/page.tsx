@@ -3,10 +3,24 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useProviderTechnicians } from "@/hooks/useProviderOnboarding";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,6 +29,7 @@ import {
   AlertCircle,
   BadgeCheck,
   BriefcaseBusiness,
+  Copy,
   PencilLine,
   Search,
   ShieldCheck,
@@ -147,7 +162,8 @@ function ManageTechniciansByProvider() {
   const [search, setSearch] = useState("");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedTechnician, setSelectedTechnician] = useState<TechnicianRecord | null>(null);
+  const [selectedTechnician, setSelectedTechnician] =
+    useState<TechnicianRecord | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     email: "",
@@ -176,10 +192,13 @@ function ManageTechniciansByProvider() {
   }, [techniciansData, search]);
 
   const stats = useMemo(() => {
-    const technicians = (techniciansData?.technicians || []) as TechnicianRecord[];
+    const technicians = (techniciansData?.technicians ||
+      []) as TechnicianRecord[];
     const total = technicians.length;
     const active = technicians.filter((t) => t.isActive !== false).length;
-    const busy = technicians.filter((t) => (t.status || "").toLowerCase().includes("busy")).length;
+    const busy = technicians.filter((t) =>
+      (t.status || "").toLowerCase().includes("busy"),
+    ).length;
     const avgRating =
       total > 0
         ? (
@@ -231,8 +250,12 @@ function ManageTechniciansByProvider() {
       setServerMsg("Technician created successfully.");
       toast.success("Technician added successfully");
 
-      if (data?.tempPassword) {
-        setTempPassword(data.tempPassword);
+      // if (data?.tempPassword) {
+      //   setTempPassword(data.tempPassword);
+      // }
+
+      if (data?.temporaryPassword) {
+        setTempPassword(data.temporaryPassword);
       }
 
       reset({
@@ -396,7 +419,7 @@ function ManageTechniciansByProvider() {
 
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="border-b border-slate-100">
-          <CardTitle className="text-xl font-semibold tracking-tight text-slate-900">
+          <CardTitle className="text-xl font-semibold tracking-tight text-foreground  dark:text-white">
             Add Technician
           </CardTitle>
         </CardHeader>
@@ -410,10 +433,53 @@ function ManageTechniciansByProvider() {
           )}
 
           {tempPassword && (
-            <Alert className="border-amber-200 bg-amber-50 text-amber-900">
-              <AlertCircle className="h-4 w-4" />
+            <Alert className="border-amber-500/20 bg-amber-500/5 text-foreground">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+
               <AlertDescription>
-                Temporary password: <strong>{tempPassword}</strong>
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold text-foreground">
+                      Technician account created
+                    </p>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Servizato generated a temporary password because no
+                      password was provided.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="flex min-w-0 flex-1 items-center rounded-xl border border-border bg-background px-3 py-2">
+                      <code className="truncate text-sm font-semibold text-foreground">
+                        {tempPassword}
+                      </code>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(tempPassword);
+
+                          toast.success("Temporary password copied");
+                        } catch {
+                          toast.error("Unable to copy password");
+                        }
+                      }}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy password
+                    </Button>
+                  </div>
+
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Save or share this password securely. It won't be shown
+                    again after leaving this screen.
+                  </p>
+                </div>
               </AlertDescription>
             </Alert>
           )}
@@ -421,7 +487,7 @@ function ManageTechniciansByProvider() {
           <form onSubmit={handleSubmit(onSubmit)} className="soace-y-5">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
+                <Label className="text-sm font-medium text-foreground  dark:text-brand-teal">
                   Name
                 </Label>
                 <Input
@@ -435,7 +501,7 @@ function ManageTechniciansByProvider() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
+                <Label className="text-sm font-medium text-foreground  dark:text-brand-teal">
                   Email
                 </Label>
                 <Input
@@ -451,7 +517,7 @@ function ManageTechniciansByProvider() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
+                <Label className="text-sm font-medium text-foreground  dark:text-brand-teal">
                   Phone
                 </Label>
                 <Input
@@ -462,7 +528,7 @@ function ManageTechniciansByProvider() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
+                <Label className="text-sm font-medium text-foreground  dark:text-brand-teal">
                   Initial Password
                 </Label>
                 <Input
@@ -475,7 +541,7 @@ function ManageTechniciansByProvider() {
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
+                <Label className="text-sm font-medium text-foreground  dark:text-brand-teal">
                   Skills
                 </Label>
                 <Input
@@ -494,7 +560,7 @@ function ManageTechniciansByProvider() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
+                <Label className="text-sm font-medium text-foreground  dark:text-brand-teal">
                   Vehicle Type
                 </Label>
                 <Input
@@ -526,331 +592,366 @@ function ManageTechniciansByProvider() {
       </Card>
 
       {/* Technician table */}
-            <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="border-b border-slate-100">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <CardTitle className="text-xl font-semibold tracking-tight text-slate-900">
-                      Technicians
-                    </CardTitle>
-                    <p className="text-sm text-slate-500">
-                      Search, update, and remove technicians from the workforce
-                    </p>
-                  </div>
-      
-                  <div className="relative w-full sm:w-80">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search technician..."
-                      className="h-11 rounded-xl pl-10"
-                    />
-                  </div>
-                </div>
-              </CardHeader>
-      
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="font-semibold text-slate-600">Name</TableHead>
-                        <TableHead className="font-semibold text-slate-600">Email / Phone</TableHead>
-                        <TableHead className="font-semibold text-slate-600">Skills</TableHead>
-                        <TableHead className="font-semibold text-slate-600">Status</TableHead>
-                        <TableHead className="font-semibold text-slate-600">Jobs</TableHead>
-                        <TableHead className="font-semibold text-slate-600">Rating</TableHead>
-                        <TableHead className="text-right font-semibold text-slate-600">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-      
-                    <TableBody>
-                      {isLoading ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className="py-10 text-center text-slate-500">
-                            Loading technicians...
-                          </TableCell>
-                        </TableRow>
-                      ) : filteredTechnicians.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className="py-14 text-center">
-                            <div className="mx-auto max-w-sm">
-                              <p className="text-base font-medium text-slate-900">No technicians found</p>
-                              <p className="mt-1 text-sm text-slate-500">
-                                Try a different search query or add a new technician.
-                              </p>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredTechnicians.map((tech: TechnicianRecord) => (
-                          <TableRow key={tech._id} className="hover:bg-slate-50/70">
-                            <TableCell className="font-medium text-slate-900">
-                              {tech.userId?.name || "-"}
-                            </TableCell>
-      
-                            <TableCell>
-                              <div className="text-slate-700">{tech.userId?.email || "-"}</div>
-                              <div className="text-xs text-slate-500">{tech.userId?.phone || "-"}</div>
-                            </TableCell>
-      
-                            <TableCell>
-                              <div className="flex flex-wrap gap-2">
-                                {(tech.skills || []).length > 0 ? (
-                                  tech.skills.map((skill: string) => (
-                                    <Badge
-                                      key={skill}
-                                      variant="secondary"
-                                      className="rounded-full bg-blue-50 text-blue-700 hover:bg-blue-50"
-                                    >
-                                      {skill}
-                                    </Badge>
-                                  ))
-                                ) : (
-                                  <span className="text-sm text-slate-500">No skills added</span>
-                                )}
-                              </div>
-                            </TableCell>
-      
-                            <TableCell>
-                              <div className="flex flex-col items-start gap-2">
-                                {statusBadge(tech.status, tech.isActive)}
-                                <span className="text-xs text-slate-500">
-                                  {tech.isActive === false ? "Inactive" : "Active"}
-                                </span>
-                              </div>
-                            </TableCell>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-100">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle className="text-xl font-semibold tracking-tight text-foreground  dark:text-brand-teal">
+                Technicians
+              </CardTitle>
+              <p className="text-sm text-slate-500">
+                Search, update, and remove technicians from the workforce
+              </p>
+            </div>
 
-                            <TableCell className="text-slate-600">{tech.jobsCompleted || 0}</TableCell>
-                            <TableCell className="text-slate-600">{tech.rating || 0}</TableCell>
-      
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="rounded-xl border-blue-200 text-blue-700 hover:bg-blue-50"
-                                  onClick={() => openEditDialog(tech)}
-                                >
-                                  <PencilLine className="mr-2 h-4 w-4" />
-                                  Update
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50"
-                                  onClick={() => openDeleteDialog(tech)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="relative w-full sm:w-80">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search technician..."
+                className="h-11 rounded-xl pl-10"
+              />
+            </div>
+          </div>
+        </CardHeader>
 
-            {/* Edit dialog */}
-            <Dialog
-              open={editDialogOpen}
-              onOpenChange={(open) => {
-                setEditDialogOpen(open);
-                if (!open) {
-                  setSelectedTechnician(null);
-                }
-              }}
-            >
-              <DialogContent className="max-w-2xl rounded-3xl border-slate-200">
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-semibold text-slate-900">
-                    Update Technician
-                  </DialogTitle>
-                  <DialogDescription>
-                    Edit technician details, availability, and job status.
-                  </DialogDescription>
-                </DialogHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="font-semibold text-slate-600">
+                    Name
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600">
+                    Email / Phone
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600">
+                    Skills
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600">
+                    Status
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600">
+                    Jobs
+                  </TableHead>
+                  <TableHead className="font-semibold text-slate-600">
+                    Rating
+                  </TableHead>
+                  <TableHead className="text-right font-semibold text-slate-600">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Name</Label>
-                    <Input
-                      value={editForm.name}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                      placeholder="Technician name"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input
-                      value={editForm.email}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, email: e.target.value }))
-                      }
-                      placeholder="tech@example.com"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Phone</Label>
-                    <Input
-                      value={editForm.phone}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, phone: e.target.value }))
-                      }
-                      placeholder="+91xxxxxxxxxx"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <select
-                      value={editForm.status}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, status: e.target.value }))
-                      }
-                      className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-10 text-center text-slate-500"
                     >
-                      <option value="offline">Offline</option>
-                      <option value="available">Available</option>
-                      <option value="busy">Busy</option>
-                      <option value="on_leave">On leave</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Skills</Label>
-                    <Input
-                      value={editForm.skills}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, skills: e.target.value }))
-                      }
-                      placeholder="AC, plumbing, electrical"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Vehicle Type</Label>
-                    <Input
-                      value={editForm.vehicleType}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, vehicleType: e.target.value }))
-                      }
-                      placeholder="Bike / Scooter / Van"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Account Status</Label>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEditForm((prev) => ({ ...prev, isActive: !prev.isActive }))
-                      }
-                      className={`flex w-full items-center justify-between rounded-xl border p-3 text-left transition ${
-                        editForm.isActive
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                          : "border-slate-200 bg-slate-50 text-slate-700"
-                      }`}
-                    >
-                      <div>
-                        <div className="font-medium">
-                          {editForm.isActive ? "Active" : "Inactive"}
-                        </div>
-                        <div className="text-xs opacity-80">
-                          {editForm.isActive
-                            ? "Technician can receive assignments"
-                            : "Technician is hidden from active assignment flow"}
-                        </div>
+                      Loading technicians...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredTechnicians.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-14 text-center">
+                      <div className="mx-auto max-w-sm">
+                        <p className="text-base font-medium text-foreground  dark:text-brand-teal">
+                          No technicians found
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Try a different search query or add a new technician.
+                        </p>
                       </div>
-                      <span
-                        className={`inline-flex h-6 w-11 items-center rounded-full p-1 transition ${
-                          editForm.isActive ? "bg-emerald-500" : "bg-slate-300"
-                        }`}
-                      >
-                        <span
-                          className={`h-4 w-4 rounded-full bg-white transition ${
-                            editForm.isActive ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </span>
-                    </button>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredTechnicians.map((tech: TechnicianRecord) => (
+                    <TableRow key={tech._id} className="hover:bg-slate-50/70">
+                      <TableCell className="font-medium text-foreground  dark:text-brand-teal">
+                        {tech.userId?.name || "-"}
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="text-slate-700">
+                          {tech.userId?.email || "-"}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {tech.userId?.phone || "-"}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          {(tech.skills || []).length > 0 ? (
+                            tech.skills.map((skill: string) => (
+                              <Badge
+                                key={skill}
+                                variant="secondary"
+                                className="rounded-full bg-blue-50 text-blue-700 hover:bg-blue-50"
+                              >
+                                {skill}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-500">
+                              No skills added
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-col items-start gap-2">
+                          {statusBadge(tech.status, tech.isActive)}
+                          <span className="text-xs text-foreground  dark:text-brand-teal">
+                            {tech.isActive === false ? "Inactive" : "Active"}
+                          </span>
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="text-foreground  dark:text-brand-lime">
+                        {tech.jobsCompleted || 0}
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {tech.rating || 0}
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-xl border-blue-200 text-blue-700 hover:bg-blue-50"
+                            onClick={() => openEditDialog(tech)}
+                          >
+                            <PencilLine className="mr-2 h-4 w-4" />
+                            Update
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50"
+                            onClick={() => openDeleteDialog(tech)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Edit dialog */}
+      <Dialog
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) {
+            setSelectedTechnician(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl rounded-3xl border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-slate-900">
+              Update Technician
+            </DialogTitle>
+            <DialogDescription>
+              Edit technician details, availability, and job status.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, name: e.target.value }))
+                }
+                placeholder="Technician name"
+                className="h-11 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                value={editForm.email}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, email: e.target.value }))
+                }
+                placeholder="tech@example.com"
+                className="h-11 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input
+                value={editForm.phone}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, phone: e.target.value }))
+                }
+                placeholder="+91xxxxxxxxxx"
+                className="h-11 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <select
+                value={editForm.status}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, status: e.target.value }))
+                }
+                className="h-11 w-full rounded-xl border border-slate-200 dark:bg-black bg-white px-3 text-sm outline-none"
+              >
+                <option value="offline">Offline</option>
+                <option value="available">Available</option>
+                <option value="busy">Busy</option>
+                <option value="on_leave">On leave</option>
+              </select>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label>Skills</Label>
+              <Input
+                value={editForm.skills}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, skills: e.target.value }))
+                }
+                placeholder="AC, plumbing, electrical"
+                className="h-11 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label>Vehicle Type</Label>
+              <Input
+                value={editForm.vehicleType}
+                onChange={(e) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    vehicleType: e.target.value,
+                  }))
+                }
+                placeholder="Bike / Scooter / Van"
+                className="h-11 rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label>Account Status</Label>
+              <button
+                type="button"
+                onClick={() =>
+                  setEditForm((prev) => ({ ...prev, isActive: !prev.isActive }))
+                }
+                className={`flex w-full items-center justify-between rounded-xl border p-3 text-left transition ${
+                  editForm.isActive
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                <div>
+                  <div className="font-medium">
+                    {editForm.isActive ? "Active" : "Inactive"}
+                  </div>
+                  <div className="text-xs opacity-80">
+                    {editForm.isActive
+                      ? "Technician can receive assignments"
+                      : "Technician is hidden from active assignment flow"}
                   </div>
                 </div>
+                <span
+                  className={`inline-flex h-6 w-11 items-center rounded-full p-1 transition ${
+                    editForm.isActive ? "bg-emerald-500" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full bg-white transition ${
+                      editForm.isActive ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
+          </div>
 
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    className="rounded-xl"
-                    onClick={() => setEditDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    className="rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
-                    onClick={handleUpdateTechnician}
-                  >
-                    Save Changes
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            {/* Delete dialog */}
-            <Dialog
-              open={deleteDialogOpen}
-              onOpenChange={(open) => {
-                setDeleteDialogOpen(open);
-                if (!open) {
-                  setSelectedTechnician(null);
-                }
-              }}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setEditDialogOpen(false)}
             >
-              <DialogContent className="max-w-md rounded-3xl border-slate-200">
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-semibold text-slate-900">
-                    Delete Technician
-                  </DialogTitle>
-                  <DialogDescription>
-                    This technician will be deactivated from the system.
-                  </DialogDescription>
-                </DialogHeader>
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700"
+              onClick={handleUpdateTechnician}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-                  Are you sure you want to deactivate{" "}
-                  <strong>{selectedTechnician?.userId?.name || "this technician"}</strong>?
-                </div>
+      {/* Delete dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            setSelectedTechnician(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md rounded-3xl border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-slate-900">
+              Delete Technician
+            </DialogTitle>
+            <DialogDescription>
+              This technician will be deactivated from the system.
+            </DialogDescription>
+          </DialogHeader>
 
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    className="rounded-xl"
-                    onClick={() => setDeleteDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    className="rounded-xl bg-rose-600 text-white hover:bg-rose-700"
-                    onClick={handleDeleteTechnician}
-                  >
-                    Deactivate
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            Are you sure you want to deactivate{" "}
+            <strong>
+              {selectedTechnician?.userId?.name || "this technician"}
+            </strong>
+            ?
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl bg-rose-600 text-white hover:bg-rose-700"
+              onClick={handleDeleteTechnician}
+            >
+              Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -123,7 +123,7 @@ const providerSidebar = [
 
   {
     label: "Invoices",
-    link: "/service-provider/invoices",
+    link: "/service-provider/finance/invoices",
     icon: "card",
   },
 
@@ -135,7 +135,7 @@ const providerSidebar = [
 
   {
     label: "Notifications",
-    link: "/service-provider/notifications",
+    link: "/notifications",
     icon: "Bell",
   },
 

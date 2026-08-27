@@ -6,6 +6,7 @@ import Technician from "./technician";
 import Booking from "./booking";
 import Job from "./job"
 import ServiceProvider from "./ServiceProvider";
+import PriceItem from "./PriceItem";
 
 // exporting ensures imports are not tree-shaken
-export { Customer, ServiceRequest, ServiceOffering,Technician,Booking,Job,ServiceProvider };
+export { Customer, ServiceRequest, ServiceOffering,Technician,Booking,Job,ServiceProvider,PriceItem };

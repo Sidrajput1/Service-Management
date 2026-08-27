@@ -77,21 +77,14 @@ export async function GET() {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await connectToDb();
 
-    const { provider } =
-      await requireServiceProvider(session.user.id);
+    const { provider } = await requireServiceProvider(session.user.id);
 
-    console.log(
-      "Provider ID:",
-      provider._id.toString()
-    );
+    console.log("Provider ID:", provider._id.toString());
 
     const technicians = await Technician.find({
       serviceProviderId: provider._id,
@@ -100,28 +93,20 @@ export async function GET() {
       .sort({ createdAt: -1 })
       .lean();
 
-    console.log(
-      "Provider technicians:",
-      technicians
-    );
+    console.log("Provider technicians:", technicians);
 
     return NextResponse.json({
       success: true,
       technicians,
     });
   } catch (error: any) {
-    console.error(
-      "Provider technicians GET:",
-      error
-    );
+    console.error("Provider technicians GET:", error);
 
     return NextResponse.json(
       {
-        error:
-          error.message ||
-          "Unable to load technicians",
+        error: error.message || "Unable to load technicians",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -143,7 +128,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    const { name, email, phone, skills = [], vehicleType } = body;
+    const { name, email, phone, skills = [], vehicleType, password } = body;
 
     if (!name || !phone) {
       return NextResponse.json(
@@ -156,8 +141,41 @@ export async function POST(request: Request) {
 
     const cleanPhone = String(phone).replace(/\D/g, "");
 
-    let user = null;
+    // const cleanEmail = email
+    //   ? String(email)
+    //       .trim()
+    //       .toLowerCase()
+    //   : "";
+
+    /*
+     * Password handling:
+     *
+     * - If provider enters a password,
+     *   use that password.
+     *
+     * - If password is blank,
+     *   generate a temporary password.
+     */
+
+    const providedPassword =
+      typeof password === "string" ? password.trim() : "";
+
+    //let user = null;
     let generatedPassword: string | undefined;
+
+    let passwordToUse = providedPassword;
+
+    if (!passwordToUse) {
+      passwordToUse = randomBytes(6).toString("hex");
+
+      generatedPassword = passwordToUse;
+    }
+
+    /*
+     * Find an existing User account
+     * by email first, then phone.
+     */
+    let user = null;
 
     /*
      * If email exists, use existing account.
@@ -187,6 +205,18 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+
+      /*
+       * Existing technician user:
+       *
+       * We DO NOT change the password here.
+       * Password changes should have their own
+       * reset/update flow.
+       *
+       * Therefore no generated password is
+       * returned for an existing account.
+       */
+      generatedPassword = undefined;
     } else {
       /*
        * New technician account
@@ -194,9 +224,10 @@ export async function POST(request: Request) {
        * Temporary password is generated.
        * We can replace this later with an invitation flow.
        */
-      const temporaryPassword = randomBytes(6).toString("hex");
+      // const temporaryPassword = randomBytes(6).toString("hex");
 
-      const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+      // const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+      const hashedPassword = await bcrypt.hash(passwordToUse, 10);
 
       const technicianEmail =
         email?.trim().toLowerCase() || `tech-${cleanPhone}@service.local`;
@@ -215,7 +246,7 @@ export async function POST(request: Request) {
        * Later we'll replace this with
        * a proper invitation/reset flow.
        */
-      generatedPassword = temporaryPassword;
+      //generatedPassword = temporaryPassword;
     }
 
     /*
@@ -259,8 +290,9 @@ export async function POST(request: Request) {
         },
 
         /*
-         * Only present when we created
-         * a brand-new technician account.
+         * Only return this when a NEW
+         * technician account was created
+         * and the password was generated.
          */
         ...(generatedPassword
           ? {
