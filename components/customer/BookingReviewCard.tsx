@@ -92,11 +92,11 @@ export default function BookingReviewCard({
 
   if (existingReview) {
     return (
-      <Card className="rounded-2xl border-emerald-200 bg-emerald-50/50">
+      <Card className="rounded-2xl border-emerald-200 bg-secondary/50">
         <CardContent className="p-6">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <CheckCircle2 className="h-5 w-5 text-secondary-foreground" />
             </div>
 
             <div>
@@ -104,7 +104,7 @@ export default function BookingReviewCard({
                 Thanks for your feedback
               </p>
 
-              <p className="mt-1 text-sm text-emerald-700">
+              <p className="mt-1 text-sm text-secondary-foreground">
                 You already reviewed this service.
               </p>
             </div>
@@ -112,7 +112,7 @@ export default function BookingReviewCard({
 
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <RatingDisplay
-              label="Technician"
+              label="Pro"
               value={existingReview.technicianRating}
             />
 
@@ -123,7 +123,7 @@ export default function BookingReviewCard({
           </div>
 
           {existingReview.comment && (
-            <div className="mt-4 rounded-xl bg-white p-4 text-sm text-muted-foreground">
+            <div className="mt-4 rounded-xl bg-card p-4 text-sm text-muted-foreground">
               "{existingReview.comment}"
             </div>
           )}
@@ -134,7 +134,7 @@ export default function BookingReviewCard({
 
   async function submitReview() {
     if (providerRating < 1 || technicianRating < 1) {
-      alert("Please rate both the technician and service provider.");
+      alert("Please rate both the Pro and service provider.");
       return;
     }
 
@@ -172,13 +172,13 @@ export default function BookingReviewCard({
 
         <p className="text-sm text-muted-foreground">
           Your feedback helps other customers choose trusted service providers
-          and technicians.
+          and Pros.
         </p>
       </CardHeader>
 
       <CardContent className="space-y-6">
         <RatingSelector
-          label="Rate your technician"
+          label="Rate your Pro"
           value={technicianRating}
           onChange={setTechnicianRating}
         />
@@ -224,7 +224,7 @@ export default function BookingReviewCard({
 
 function RatingDisplay({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-white p-4">
+    <div className="rounded-xl bg-card p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
 
       <div className="mt-2 flex items-center gap-1">

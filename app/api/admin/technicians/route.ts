@@ -6,12 +6,11 @@ import Technician from "@/models/technician";
 import User from "@/models/user";
 import { NextResponse } from "next/server";
 
-
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    await requireRole(["admin", "dispatcher"]);
+    await requireRole(["admin"]);
     await connectToDb();
 
     const url = new URL(request.url);
@@ -28,13 +27,15 @@ export async function GET(request: Request) {
           { email: { $regex: q, $options: "i" } },
           { phone: { $regex: q, $options: "i" } },
         ],
-      }).select("_id").lean();
+      })
+        .select("_id")
+        .lean();
 
       filter.userId = { $in: users.map((u: any) => u._id) };
     }
 
     const technicians = await Technician.find(filter)
-      .populate("userId")
+      .populate("userId", "name email phone isActive")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -54,7 +55,14 @@ export async function GET(request: Request) {
                 {
                   $in: [
                     "$status",
-                    ["assigned", "accepted", "arrived", "otp_verified", "in_progress", "on_hold"],
+                    [
+                      "assigned",
+                      "accepted",
+                      "arrived",
+                      "otp_verified",
+                      "in_progress",
+                      "on_hold",
+                    ],
                   ],
                 },
                 1,
@@ -68,7 +76,14 @@ export async function GET(request: Request) {
                 {
                   $in: [
                     "$status",
-                    ["assigned", "accepted", "arrived", "otp_verified", "in_progress", "on_hold"],
+                    [
+                      "assigned",
+                      "accepted",
+                      "arrived",
+                      "otp_verified",
+                      "in_progress",
+                      "on_hold",
+                    ],
                   ],
                 },
                 1,
@@ -127,7 +142,7 @@ export async function GET(request: Request) {
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Server error" },
-      { status: err.status || 500 }
+      { status: err.status || 500 },
     );
   }
 }

@@ -1,12 +1,13 @@
+import { requireRole } from "@/lib/auth";
+import { apiFailure } from "@/lib/api-response";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { connectToDb } from "@/lib/db";
 
 import { Technician } from "@/models/index";
 import Job from "@/models/job";
-
 
 export const runtime = "nodejs";
 
@@ -22,8 +23,8 @@ export async function DELETE(
   },
 ) {
   try {
-    const session =
-      await getServerSession(authOptions);
+    await requireRole(["technician"]);
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -38,17 +39,15 @@ export async function DELETE(
 
     await connectToDb();
 
-    const technician =
-      await Technician.findOne({
-        userId: session.user.id,
-        isActive: true,
-      });
+    const technician = await Technician.findOne({
+      userId: session.user.id,
+      isActive: true,
+    });
 
     if (!technician) {
       return NextResponse.json(
         {
-          error:
-            "Technician profile not found",
+          error: "Technician profile not found",
         },
         {
           status: 404,
@@ -56,20 +55,14 @@ export async function DELETE(
       );
     }
 
-    const { id, partIndex } =
-      await params;
+    const { id, partIndex } = await params;
 
-    const index =
-      Number(partIndex);
+    const index = Number(partIndex);
 
-    if (
-      !Number.isInteger(index) ||
-      index < 0
-    ) {
+    if (!Number.isInteger(index) || index < 0) {
       return NextResponse.json(
         {
-          error:
-            "Invalid part index",
+          error: "Invalid part index",
         },
         {
           status: 400,
@@ -77,26 +70,19 @@ export async function DELETE(
       );
     }
 
-    const job =
-      await Job.findOne({
-        _id: id,
-        technicianId:
-          technician._id,
+    const job = await Job.findOne({
+      _id: id,
+      technicianId: technician._id,
 
-        status: {
-          $in: [
-            "otp_verified",
-            "in_progress",
-            "on_hold",
-          ],
-        },
-      });
+      status: {
+        $in: ["otp_verified", "in_progress", "on_hold"],
+      },
+    });
 
     if (!job) {
       return NextResponse.json(
         {
-          error:
-            "Job not found or cannot be modified",
+          error: "Job not found or cannot be modified",
         },
         {
           status: 404,
@@ -104,18 +90,12 @@ export async function DELETE(
       );
     }
 
-    const parts =
-      Array.isArray(
-        job.partsUsed,
-      )
-        ? [...job.partsUsed]
-        : [];
+    const parts = Array.isArray(job.partsUsed) ? [...job.partsUsed] : [];
 
     if (index >= parts.length) {
       return NextResponse.json(
         {
-          error:
-            "Part not found",
+          error: "Part not found",
         },
         {
           status: 404,
@@ -125,27 +105,16 @@ export async function DELETE(
 
     parts.splice(index, 1);
 
-    job.partsUsed =
-      parts as any;
+    job.partsUsed = parts as any;
 
     await job.save();
 
     return NextResponse.json({
       success: true,
 
-      partsUsed:
-        job.partsUsed,
+      partsUsed: job.partsUsed,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Unable to remove part",
-      },
-      {
-        status: 500,
-      },
-    );
+  } catch (error) {
+    return apiFailure(error);
   }
 }

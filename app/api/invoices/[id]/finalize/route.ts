@@ -4,11 +4,12 @@ import { connectToDb } from "@/lib/db";
 import Invoice from "@/models/invoice";
 import { calculateInvoiceTotal } from "@/lib/billing";
 import Job from "@/models/job";
+import { assertInvoiceMutable } from "@/lib/finance-ledger";
 
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole(["admin", "dispatcher","customer"]);
+    await requireRole(["admin", "dispatcher"]);
     await connectToDb();
 
     const {id} = await params;
@@ -17,6 +18,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
+    await assertInvoiceMutable(invoice);
     if (invoice.items.length === 0) {
       return NextResponse.json({ error: "Add at least one item before finalizing" }, { status: 400 });
     }

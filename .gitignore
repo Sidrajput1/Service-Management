@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 .env.production
+!.env.example
+
+# Local verification output; the concise completion report is tracked separately.
+.task-checks/
 
 # vercel
 .vercel
@@ -43,3 +47,9 @@ next-env.d.ts
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# Ignore all Markdown files
+*.md
+
+# Allow README.md
+!README.md

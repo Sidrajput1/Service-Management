@@ -1,6 +1,7 @@
 "use client";
+import {googleMapsLink} from "@/lib/map-links.mjs";
 
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import ChatWindow from "@/components/chat/ChatWindow";
 import JobChatPanel from "@/components/chat/JobChatPanel";
 import CollectPaymentActions from "@/components/payments/CollectPaymentActions";
@@ -480,11 +481,7 @@ function TechDash({ session }: any) {
 
   const customer = selectedJob?.bookingId?.customerId;
   const address = selectedJob?.bookingId?.address;
-  const coords = address?.location?.coordinates || [];
-  const mapUrl =
-    coords.length === 2
-      ? `https://www.google.com/maps?q=${coords[1]},${coords[0]}`
-      : null;
+  const mapUrl=googleMapsLink(address,true);
 
   return (
     

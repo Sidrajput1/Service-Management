@@ -5,17 +5,25 @@ import Payment from "@/models/payment";
 import Technician from "@/models/technician";
 import { NextResponse } from "next/server";
 
-
 export const runtime = "nodejs";
 
-export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }) {
+export async function GET(
+  _: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    await requireRole(["admin", "dispatcher"]);
+    await requireRole(["admin"]);
     await connectToDb();
-    const {id} = await params;
-    const technician = await Technician.findById(id).populate("userId");
+    const { id } = await params;
+    const technician = await Technician.findById(id).populate(
+      "userId",
+      "name email phone isActive",
+    );
     if (!technician) {
-      return NextResponse.json({ error: "Technician not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Technician not found" },
+        { status: 404 },
+      );
     }
 
     const jobs = await Job.find({ technicianId: technician._id })
@@ -25,7 +33,10 @@ export async function GET(_: Request, { params }:  { params: Promise<{ id: strin
       .limit(20)
       .lean();
 
-    const payments = await Payment.find({ jobId: { $in: jobs.map((j: any) => j._id) }, status: "success" })
+    const payments = await Payment.find({
+      jobId: { $in: jobs.map((j: any) => j._id) },
+      status: "success",
+    })
       .sort({ createdAt: -1 })
       .limit(20)
       .lean();
@@ -38,23 +49,29 @@ export async function GET(_: Request, { params }:  { params: Promise<{ id: strin
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Server error" },
-      { status: err.status || 500 }
+      { status: err.status || 500 },
     );
   }
 }
 
-export async function PATCH(request: Request, { params }:  { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     await requireRole(["admin"]);
     await connectToDb();
 
-    const {id} = await params;
+    const { id } = await params;
     const body = await request.json();
     const { isActive, status } = body || {};
 
     const technician = await Technician.findById(id);
     if (!technician) {
-      return NextResponse.json({ error: "Technician not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Technician not found" },
+        { status: 404 },
+      );
     }
 
     if (typeof isActive === "boolean") {
@@ -71,7 +88,7 @@ export async function PATCH(request: Request, { params }:  { params: Promise<{ i
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Server error" },
-      { status: err.status || 500 }
+      { status: err.status || 500 },
     );
   }
 }

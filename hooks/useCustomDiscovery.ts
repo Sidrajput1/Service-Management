@@ -1,132 +1,92 @@
 "use client";
-
-import { useMutation, useQuery } from "@tanstack/react-query";
-
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useCustomerScope } from "@/hooks/useCustomerScope";
+import {
+  discoveryParams,
+  discoveryQueryOptions,
+} from "@/lib/discovery-query.mjs";
+export { discoveryParams };
+import type {
+  DiscoveryFilters,
+  DiscoveryResult,
+  MarketplaceCatalog,
+} from "@/lib/marketplace-types";
+
 
 export function useCustomerServices() {
   return useQuery({
-    queryKey: ["customer-service-catalog"],
-
-    queryFn: async () => {
-      const { data } = await api.get("/customer/services");
-
-      return data;
-    },
+    queryKey: ["marketplace-catalog"],
+    queryFn: async ({ signal }) =>
+      (await api.get<MarketplaceCatalog>("/catalog", { signal })).data,
+    staleTime: 60000,
   });
 }
-
-// export function useCustomerServices(
-//   search?: string,
-// ) {
-//   return useQuery({
-//     queryKey: [
-//       "customer-services",
-//       search || "",
-//     ],
-
-//     queryFn: async () => {
-//       const params = new URLSearchParams();
-
-//       if (search?.trim()) {
-//         params.set(
-//           "search",
-//           search.trim(),
-//         );
-//       }
-
-//       const { data } =
-//         await api.get(
-//           `/customer/services?${params.toString()}`,
-//         );
-
-//       return data;
-//     },
-
-//     enabled: true,
-
-//     staleTime: 60_000,
-//   });
-// }
-export function useCustomerProviders({
-  serviceId,
-  city,
-  pincode,
-  latitude,
-  longitude,
-}: {
-  serviceId?: string;
-  city?: string;
-  pincode?: string;
-  latitude?: number;
-  longitude?: number;
-}) {
+export function useCustomerProviders(
+  filters: DiscoveryFilters & { public?: boolean },
+  enabled = true,
+) {
+  const scope = useCustomerScope();
+  const { public: publicQuery = false, ...search } = filters;
   return useQuery({
-    queryKey: [
-      "customer-providers",
-      serviceId,
-      city,
-      pincode,
-      latitude,
-      longitude,
-    ],
-
-    queryFn: async () => {
-      const params = new URLSearchParams();
-
-      if (serviceId) {
-        params.set("serviceId", serviceId);
-      }
-
-      if (city) {
-        params.set("city", city);
-      }
-
-      if (pincode) {
-        params.set("pincode", pincode);
-      }
-
-      if (latitude !== undefined && longitude !== undefined) {
-        params.set("latitude", String(latitude));
-
-        params.set("longitude", String(longitude));
-      }
-
-      const { data } = await api.get(
-        `/customer/discovery?${params.toString()}`,
-      );
-
-      return data;
-    },
-
-    enabled: Boolean(serviceId),
+    ...discoveryQueryOptions(
+      search,
+      publicQuery ? "public" : `customer:${scope.userId || "anonymous"}`,
+      async (path, options) =>
+        (await api.get<DiscoveryResult>(path, options)).data,
+    ),
+    enabled: enabled && (publicQuery || scope.enabled),
   });
 }
-
+export function useTopRatedProviders(
+  location: string | DiscoveryFilters,
+  enabled = true,
+) {
+  const filters = typeof location === "string" ? { city: location } : location;
+  return useQuery({
+    ...discoveryQueryOptions(
+      filters,
+      "public",
+      async (path, options) =>
+        (await api.get<DiscoveryResult>(path, options)).data,
+      { topRated: true },
+    ),
+    enabled:
+      enabled &&
+      Boolean(
+        filters.city?.trim() ||
+          filters.locality?.trim() ||
+          filters.pincode?.trim(),
+      ),
+  });
+}
 export function useCreateServiceRequest() {
+  const client = useQueryClient();
   return useMutation({
     mutationFn: async (payload: {
+      requestKey: string;
+      destinationConfirmed: true;
       serviceOfferingId: string;
-
+      repeatOfBookingId?: string;
+      destinationCapture?: import("@/components/customer/DestinationCapture").DestinationCaptureValue;
       address: {
         addressLine: string;
         city: string;
         state?: string;
+        locality?: string;
         pincode: string;
-
-        location?: {
-          type: "Point";
-          coordinates: [number, number];
-        };
       };
-
       preferredDate?: string;
-
       description?: string;
-    }) => {
-      const { data } = await api.post("/customer/service-requests", payload);
-
-      return data;
+      quantity?: number;
+    }) => (await api.post("/customer/service-requests", payload)).data,
+    onSuccess: () => {
+      for (const key of [
+        "customer-requests",
+        "customer-bookings",
+        "customer-dashboard",
+      ])
+        client.invalidateQueries({ queryKey: [key] });
     },
   });
 }

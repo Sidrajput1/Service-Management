@@ -5,9 +5,11 @@ export interface ITechnician extends Document {
   userId: mongoose.Types.ObjectId; // link to User model
   serviceProviderId: mongoose.Types.ObjectId;
   skills: string[]; // e.g. ["ac", "plumbing"]
+  skillKeys?: string[];
+  creationKey?: string;
   vehicleType?: string;
   status: "offline" | "available" | "busy" | "on_leave";
-  isActive:boolean;
+  isActive: boolean;
   currentLocation?: {
     type: "Point";
     coordinates: [number, number]; // [lng, lat]
@@ -31,15 +33,26 @@ export interface ITechnician extends Document {
 
 const TechnicianSchema = new Schema<ITechnician>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
     serviceProviderId: {
-  type: Schema.Types.ObjectId,
-  ref: "ServiceProvider",
-  required: true,
-},
+      type: Schema.Types.ObjectId,
+      ref: "ServiceProvider",
+      required: true,
+    },
     skills: { type: [String], default: [] },
+    skillKeys: { type: [String], default: [] },
+    creationKey: String,
     vehicleType: String,
-    status: { type: String, enum: ["offline", "available", "busy", "on_leave"], default: "offline" },
+    status: {
+      type: String,
+      enum: ["offline", "available", "busy", "on_leave"],
+      default: "offline",
+    },
     isActive: { type: Boolean, default: true },
     currentLocation: {
       type: { type: String, enum: ["Point"], default: "Point" },
@@ -61,10 +74,17 @@ const TechnicianSchema = new Schema<ITechnician>(
     jobsCompleted: { type: Number, default: 0 },
     metadata: Schema.Types.Mixed,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-TechnicianSchema.index({ "currentLocation": "2dsphere" });
+TechnicianSchema.index({ currentLocation: "2dsphere" });
+TechnicianSchema.index(
+  { serviceProviderId: 1, creationKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { creationKey: { $type: "string" } },
+  },
+);
 TechnicianSchema.index({ lastCompletedWorkLocation: "2dsphere" });
 TechnicianSchema.index({
   serviceProviderId: 1,
@@ -72,5 +92,6 @@ TechnicianSchema.index({
 });
 
 export const Technician: Model<ITechnician> =
-  mongoose.models.Technician || mongoose.model<ITechnician>("Technician", TechnicianSchema);
+  mongoose.models.Technician ||
+  mongoose.model<ITechnician>("Technician", TechnicianSchema);
 export default Technician;

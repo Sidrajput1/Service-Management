@@ -1,0 +1,17 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { Bell, CheckCheck, ArrowUpRight } from "lucide-react";
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/hooks/useNotifications";
+import { CustomerPageHeading, CustomerState, CursorPager } from "./CustomerUi";
+import { Button } from "@/components/ui/button";
+import { safeCustomerLink } from "@/lib/access-policy.mjs";
+import { dateTime, type NotificationItem } from "@/lib/customer-types";
+export function CustomerNotificationsView() {
+  const [history, setHistory] = useState<string[]>([]);
+  const query = useNotifications(15, history.at(-1));
+  const read = useMarkNotificationRead();
+  const readAll = useMarkAllNotificationsRead();
+  const notifications: NotificationItem[] = query.data?.notifications || [];
+  return <><CustomerPageHeading eyebrow="THE LATEST FROM YOUR SERVICE TEAM" title="Notifications" description="Booking updates, service progress, and invoice notices, saved to your account." /><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{Number(query.data?.unreadCount || 0)} unread</p><Button variant="outline" disabled={readAll.isPending || !query.data?.unreadCount} className="h-11 px-4" onClick={() => readAll.mutate()}><CheckCheck className="size-4" />Mark all as read</Button></div>{(read.isError || readAll.isError) && <p role="alert" className="mb-5 text-sm text-primary">We couldn’t save that change. Please try again.</p>}<CustomerState loading={query.isLoading} error={query.isError && !query.data} retry={() => query.refetch()} empty={!notifications.length && !query.isError} emptyFooter={<CursorPager history={history} change={setHistory} nextCursor={query.data?.nextCursor} />} message="You’re all caught up. Updates from your service team will appear here."><div className="space-y-3">{notifications.map(notification => { const href = safeCustomerLink(notification.actionUrl) || (notification.entityType === "booking" ? safeCustomerLink(`/customer/bookings/${notification.entityId}`) : notification.entityType === "invoice" ? safeCustomerLink(`/customer/invoice/${notification.entityId}`) : null); return <article key={notification._id} className={`customer-panel flex items-start gap-4 ${notification.status === "unread" ? "border-primary/20! bg-primary/2!" : ""}`}><span className="mt-1 flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-brand-teal-dark"><Bell className="size-4" /></span><div className="min-w-0 flex-1"><h2 className="text-sm font-bold">{notification.title}</h2><p className="mt-2 text-sm leading-7 text-muted-foreground">{notification.message.replace(/technician/gi, "Pro")}</p><p className="mt-3 text-[10px] text-muted-foreground">{dateTime(notification.createdAt)}</p><div className="mt-3 flex flex-wrap gap-4">{href && <Link href={href} className="public-text-link" onClick={() => { if (notification.status === "unread") read.mutate(notification._id); }}>View details <ArrowUpRight className="size-3.5" /></Link>}{notification.status === "unread" && <button disabled={read.isPending} className="public-text-link" onClick={() => read.mutate(notification._id)}>Mark as read</button>}</div></div></article>; })}</div><CursorPager history={history} change={setHistory} nextCursor={query.data?.nextCursor} /></CustomerState></>;
+}

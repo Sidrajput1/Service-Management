@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import PricePicker from "@/components/price-master/PricePicker";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -214,6 +214,7 @@ export default function AdminBillingPage() {
   const { data: priceData } = usePriceItem();
 
   const router = useRouter();
+  const billingPath = usePathname();
   const {
     register,
     control,
@@ -935,7 +936,7 @@ export default function AdminBillingPage() {
                 <Button
                   variant="outline"
                   onClick={() =>
-                    router.push(`/admin/billing/${selectedInvoice._id}`)
+                    router.push(`${billingPath.startsWith("/dispatcher") ? "/dispatcher" : "/admin"}/billing/${selectedInvoice._id}`)
                   }
                   className="rounded-xl"
                 >

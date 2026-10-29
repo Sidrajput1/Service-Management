@@ -1,80 +1,42 @@
+import { requireAdmin } from "@/lib/auth";
+import { writeCatalog } from "@/lib/admin-catalog";
 import { requireRole } from "@/lib/auth";
-import { connectToDb } from "@/lib/db";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { normalizeText, escapeRegex } from "@/lib/marketplace-policy.mjs";
 import PriceItem from "@/models/PriceItem";
-import { NextResponse } from "next/server";
-import z from "zod";
-
-const CreateSchema = z.object({
-    itemType:z.enum(["service","part","visit","other"]),
-    name:z.string().min(1),
-    price:z.coerce.number().min(0),
-    unit:z.string().optional(),
-    taxPercent: z.coerce.number().optional(),
-  description: z.string().optional(),
-  isActive: z.boolean().optional(),
-    
-})
-
-export async function GET(request:Request){
-    try {
-        await connectToDb();
-
-        const url = new URL(request.url);
-
-        const showInactive = url.searchParams.get("showInactive") === "true";
-
-        const type = url.searchParams.get("type") || "";
-        const q = url.searchParams.get("q") || "";
-        
-
-        const filter: any = {};
-
-        if(!showInactive){
-            filter.isActive = true;
-        };
-        if(type){
-            filter.itemType = type;
-        }
-        if(q){
-            filter.name = { $regex: q, $options: "i" };
-        }
-
-        const items = await PriceItem.find(filter).sort({itemType:1,name:1}).lean();
-
-        return NextResponse.json({items});
-
-    } catch (error:any) {
-        return NextResponse.json(
-        {error:error.message ||  "Server error"},
-        {status:500}
-        );
-    }
-};
-
-export async function POST(request:Request){
-    try {
-        await requireRole(["admin","dispatcher"]);
-        await connectToDb();
-
-        const body = await request.json();
-        const parsed = CreateSchema.parse(body);
-
-        const item = await PriceItem.create({
-            ...parsed,
-            taxPercent:parsed.taxPercent ??  18,
-            isActive:parsed.isActive ??  true,
-        });
-
-        return NextResponse.json({item},{status:201});
-        
-    } catch (err:any) {
-        if (err.name === "ZodError") {
-      return NextResponse.json({ error: err.errors }, { status: 400 });
-    }
-    return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.status || 500 }
-    );
+export async function GET(request: Request) {
+  try {
+    await requireRole(["admin", "dispatcher"]);
+    const params = new URL(request.url).searchParams,
+      q = normalizeText(params.get("q")).slice(0, 100),
+      itemType = params.get("type");
+    const items = await PriceItem.find({
+      ...(params.get("showInactive") !== "true" ? { isActive: true } : {}),
+      ...(itemType && ["service", "part", "visit", "other"].includes(itemType)
+        ? { itemType }
+        : {}),
+      ...(q ? { name: { $regex: escapeRegex(q), $options: "i" } } : {}),
+    })
+      .sort({ itemType: 1, name: 1 })
+      .limit(500)
+      .maxTimeMS(5000)
+      .select(
+        "name itemType price taxPercent unit description isActive catalogKey categoryKey skillKeys suggestedPrice reviewVersion",
+      )
+      .lean();
+    return privateJson({ items });
+  } catch (error) {
+    return apiFailure(error);
   }
-
+}
+export async function POST(request: Request) {
+  try {
+    const { user } = await requireAdmin();
+    return privateJson(
+      await writeCatalog(String(user._id), await request.json()),
+      201,
+    );
+  } catch (error) {
+    return apiFailure(error);
+  }
 }

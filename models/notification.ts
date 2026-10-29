@@ -29,7 +29,12 @@ export type NotificationChannel = "in_app" | "email" | "sms" | "whatsapp";
 
 export interface INotification extends Document {
   recipientUserId?: mongoose.Types.ObjectId;
-  recipientRole?: "admin" | "dispatcher" | "technician" | "customer" | "service_provider";
+  recipientRole?:
+    | "admin"
+    | "dispatcher"
+    | "technician"
+    | "customer"
+    | "service_provider";
   title: string;
   message: string;
   type:
@@ -42,9 +47,19 @@ export interface INotification extends Document {
     | "system";
   status: NotificationStatus;
   channel: NotificationChannel;
-  entityType?: "lead" | "booking" | "job" | "invoice" | "payment" | "customer" | "technician";
+  entityType?:
+    | "lead"
+    | "booking"
+    | "job"
+    | "invoice"
+    | "payment"
+    | "customer"
+    | "technician"
+    | "service_provider"
+    | "service_offering";
   entityId?: mongoose.Types.ObjectId;
   actionUrl?: string;
+  dedupeKey?: string;
   metadata?: Record<string, any>;
   readAt?: Date;
   createdAt: Date;
@@ -56,7 +71,13 @@ const NotificationSchema = new Schema<INotification>(
     recipientUserId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     recipientRole: {
       type: String,
-      enum: ["admin", "dispatcher", "technician", "customer","service_provider"],
+      enum: [
+        "admin",
+        "dispatcher",
+        "technician",
+        "customer",
+        "service_provider",
+      ],
       index: true,
     },
 
@@ -65,7 +86,15 @@ const NotificationSchema = new Schema<INotification>(
 
     type: {
       type: String,
-      enum: ["lead", "booking", "job", "invoice", "payment", "profile", "system"],
+      enum: [
+        "lead",
+        "booking",
+        "job",
+        "invoice",
+        "payment",
+        "profile",
+        "system",
+      ],
       required: true,
       index: true,
     },
@@ -85,20 +114,36 @@ const NotificationSchema = new Schema<INotification>(
 
     entityType: {
       type: String,
-      enum: ["lead", "booking", "job", "invoice", "payment", "customer", "technician"],
+      enum: [
+        "lead",
+        "booking",
+        "job",
+        "invoice",
+        "payment",
+        "customer",
+        "technician",
+        "service_provider",
+        "service_offering",
+      ],
     },
     entityId: { type: Schema.Types.ObjectId },
     actionUrl: String,
+    dedupeKey: String,
     metadata: Schema.Types.Mixed,
     readAt: Date,
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 NotificationSchema.index({ recipientUserId: 1, status: 1, createdAt: -1 });
 NotificationSchema.index({ recipientRole: 1, status: 1, createdAt: -1 });
 
+NotificationSchema.index(
+  { dedupeKey: 1 },
+  { unique: true, partialFilterExpression: { dedupeKey: { $type: "string" } } },
+);
 
 export const Notification: Model<INotification> =
-  mongoose.models.Notification || mongoose.model<INotification>("Notification", NotificationSchema);
+  mongoose.models.Notification ||
+  mongoose.model<INotification>("Notification", NotificationSchema);
 export default Notification;

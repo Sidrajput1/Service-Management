@@ -74,6 +74,7 @@ const ConversationSchema = new Schema<IConversation>(
 ConversationSchema.index({jobId:1, type:1});
 
 ConversationSchema.index({ "participants.userId": 1, lastMessageAt: -1 });
+ConversationSchema.index({ "participants.userId": 1, _id: -1 });
 
 export const Conversation: Model<IConversation> =
   mongoose.models.Conversation || mongoose.model<IConversation>("Conversation", ConversationSchema);

@@ -1,74 +1,26 @@
-import { NextResponse } from "next/server";
-
+import { notificationAudience } from "@/lib/access-policy.mjs";
 import { requireCurrentUser } from "@/lib/auth";
-import { connectToDb } from "@/lib/db";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { objectIdSchema } from "@/lib/pagination";
+import { z } from "zod";
 import Notification from "@/models/notification";
-
-
 export const runtime = "nodejs";
-
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> } ) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await connectToDb();
     const user = await requireCurrentUser();
-    const body = await request.json();
-
-    const {id} = await params;
-    const notif = await Notification.findById(id);
-    if (!notif) {
-      return NextResponse.json({ error: "Notification not found" }, { status: 404 });
-    }
-
-    const ownerMatch =
-      String(notif.recipientUserId || "") === String(user._id) ||
-      notif.recipientRole === user.role;
-
-    if (!ownerMatch) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    if (body.status === "read") {
-      notif.status = "read";
-      notif.readAt = new Date();
-    }
-
-    await notif.save();
-
-    return NextResponse.json({ notif });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.status || 500 }
-    );
-  }
+    const id = objectIdSchema.parse((await params).id);
+    z.object({ status: z.literal("read") }).parse(await request.json());
+    const notif = await Notification.findOneAndUpdate({ _id: id, ...notificationAudience(user) }, { $set: { status: "read", readAt: new Date() } }, { new: true }).select("_id status readAt").lean();
+    if (!notif) return privateJson({ error: "Notification not found" }, 404);
+    return privateJson({ notif });
+  } catch (error) { return apiFailure(error); }
 }
-
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> } ) {
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await connectToDb();
-    const {id} = await params;
     const user = await requireCurrentUser();
-
-    const notif = await Notification.findById(id);
-    if (!notif) {
-      return NextResponse.json({ error: "Notification not found" }, { status: 404 });
-    }
-
-    const ownerMatch =
-      String(notif.recipientUserId || "") === String(user._id) ||
-      notif.recipientRole === user.role;
-
-    if (!ownerMatch) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    await Notification.findByIdAndDelete(id);
-
-    return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.status || 500 }
-    );
-  }
+    const id = objectIdSchema.parse((await params).id);
+    const removed = await Notification.findOneAndDelete({ _id: id, ...notificationAudience(user) });
+    if (!removed) return privateJson({ error: "Notification not found" }, 404);
+    return privateJson({ success: true });
+  } catch (error) { return apiFailure(error); }
 }

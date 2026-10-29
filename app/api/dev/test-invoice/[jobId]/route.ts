@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth";
+import { apiFailure } from "@/lib/api-response";
+import { objectIdSchema } from "@/lib/pagination";
 
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
@@ -9,7 +12,8 @@ export async function POST(
   { params }: { params: Promise<{ jobId: string }> },
 ) {
   try {
-    const { jobId } = await params;
+    await requireAdmin();
+    const jobId = objectIdSchema.parse((await params).jobId);
 
     await connectToDb();
 
@@ -39,15 +43,5 @@ export async function POST(
         jobId: invoice.jobId,
       },
     });
-  } catch (error: any) {
-    console.error("TEST INVOICE ERROR:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || "Invoice generation failed",
-      },
-      { status: 500 },
-    );
-  }
+  } catch (error) { console.error("Invoice preparation failed."); return apiFailure(error); }
 }

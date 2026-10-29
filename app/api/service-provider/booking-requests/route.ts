@@ -1,65 +1,52 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import mongoose from "mongoose";
-// import Customer from "@/models/customer";
-// import ServiceRequest from "@/models/ServiceRequest";
-// import ServiceOffering from "@/models/ServiceOffering";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { connectToDb } from "@/lib/db";
-import { requireServiceProvider } from "@/lib/service-provider";
-import { Customer, ServiceRequest, ServiceOffering } from "@/models";
-
-
-
-
-
+import { requireProvider } from "@/lib/service-provider";
+import { ServiceRequest } from "@/models";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { readPage, pageResult } from "@/lib/pagination";
+import {
+  coverageForRequest,
+  coverageReviewToken,
+} from "@/lib/request-coverage";
 export const runtime = "nodejs";
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    await connectToDb();
-
-    const { provider } = await requireServiceProvider(session.user.id);
-
-//      if (!mongoose.models.Customer) {
-//   console.error("Customer model not registered yet");
-// }
-    //const Customer = mongoose.models.Customer || require("./models/customer").default;
-    console.log("Registered models:", mongoose.modelNames());
-
+    const { provider } = await requireProvider();
+    const { cursor, limit } = readPage(request);
     const requests = await ServiceRequest.find({
       serviceProviderId: provider._id,
-
       status: "open",
+      ...(cursor ? { _id: { $lt: cursor } } : {}),
     })
-       .populate("customerId", "name phone email")
-       .populate(
-            "serviceOfferingId",
-            "name price offerEnabled offerName discountType discountValue",
+      .select(
+        "serviceName customerId serviceOfferingId address preferredDate description pricing status coverage.status coverage.requiresProviderConfirmation coverage.addressIdentity updatedAt createdAt",
       )
-      .sort({
-        createdAt: -1,
-      })
+      .populate("customerId", "name")
+      .populate(
+        "serviceOfferingId",
+        "name price offerEnabled offerName discountType discountValue",
+      )
+      .sort({ _id: -1 })
+      .limit(limit + 1)
       .lean();
-
-    return NextResponse.json({
+    const page = pageResult(requests, limit);
+    return privateJson({
       success: true,
-      requests,
+      requests: page.items.map((row) => {
+        const currentCoverage = coverageForRequest(provider, row.address);
+        return {
+          ...row,
+          coverage: {
+            status: row.coverage?.status || currentCoverage.status,
+            requiresProviderConfirmation:
+              row.coverage?.requiresProviderConfirmation === true ||
+              currentCoverage.requiresProviderConfirmation,
+            currentStatus: currentCoverage.status,
+          },
+          coverageReviewToken: coverageReviewToken(row),
+        };
+      }),
+      nextCursor: page.nextCursor,
     });
-  } catch (error: any) {
-    console.error("Provider booking requests:", error);
-
-    return NextResponse.json(
-      {
-        error: error.message || "Unable to load booking requests",
-      },
-      { status: 500 },
-    );
+  } catch (error) {
+    return apiFailure(error);
   }
 }

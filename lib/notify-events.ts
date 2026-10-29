@@ -1,3 +1,4 @@
+import { arrivalMessage } from "./arrival-message.mjs";
 import { createNotification } from "./notification";
 
 
@@ -115,7 +116,7 @@ export async function notifyJobAssigned(input: {
     type: "job",
     entityType: "job",
     entityId: input.jobId,
-    actionUrl: `/technician/jobs/${input.jobId}`,
+    actionUrl: `/technician/all-jobs/${input.jobId}`,
     metadata: { bookingId: input.bookingId, serviceName: input.serviceName },
   });
 
@@ -254,6 +255,7 @@ export async function notifyTechnicianAcceptedJob(
 
 
 export async function notifyJobStatus(input: {
+  dedupeKey?:string;
   customerUserId?: string;
   jobId: string;
   bookingId: string;
@@ -274,6 +276,7 @@ export async function notifyJobStatus(input: {
     entityId: input.jobId,
     actionUrl: input.actionUrl || `/customer/bookings/${input.bookingId}`,
     metadata: input.metadata || {},
+    dedupeKey:input.dedupeKey,
   });
 };
 
@@ -317,37 +320,7 @@ export async function notifyTechnicianEnroute(
 // Technician arrived
 //
 
-export async function notifyTechnicianArrived(
-  input: {
-    customerUserId: string;
-
-    jobId: string;
-
-    bookingId: string;
-
-    technicianName?: string;
-  },
-) {
-  await notifyJobStatus({
-    customerUserId:
-      input.customerUserId,
-
-    jobId:
-      input.jobId,
-
-    bookingId:
-      input.bookingId,
-
-    title:
-      "Technician arrived",
-
-    message:
-      `${
-        input.technicianName ||
-        "Your technician"
-      } has arrived at the service location. Your verification code is ready.`,
-  });
-};
+export async function notifyTechnicianArrived(input:{customerUserId:string;jobId:string;bookingId:string;technicianName?:string;dedupeKey?:string}) { await notifyJobStatus({...arrivalMessage(input.jobId,input.bookingId,input.customerUserId),jobId:input.jobId,bookingId:input.bookingId,customerUserId:input.customerUserId,dedupeKey:input.dedupeKey});}
 
 //
 // OTP verified
@@ -408,6 +381,7 @@ export async function notifyServiceCompleted(
 
       title:
         "Service completed",
+      dedupeKey: `job-completed:${input.jobId}:${input.customerUserId}`,
 
       message:
         `Your ${
@@ -449,6 +423,7 @@ export async function notifyServiceCompleted(
           input.serviceName ||
           "assigned job"
         } has been completed by the technician.`,
+      dedupeKey: `job-completed:${input.jobId}:${input.providerUserId}`,
 
       type:
         "job",
@@ -484,6 +459,7 @@ export async function notifyServiceCompleted(
           input.serviceName ||
           "assigned job"
         } has been marked completed.`,
+      dedupeKey: `job-completed:${input.jobId}:${input.technicianUserId}`,
 
       type:
         "job",
@@ -495,7 +471,7 @@ export async function notifyServiceCompleted(
         input.jobId,
 
       actionUrl:
-        `/technician/jobs/${input.jobId}`,
+        `/technician/all-jobs/${input.jobId}`,
 
       metadata: {
         bookingId:
@@ -530,6 +506,7 @@ export async function notifyInvoiceIssued(input: {
   await createNotification({
     recipientUserId: input.customerUserId,
     title: "Invoice issued",
+    dedupeKey: `invoice-issued:${input.invoiceId}:${input.customerUserId}`,
     message: `Your invoice ${input.invoiceNumber} is ready`,
     type: "invoice",
     entityType: "invoice",
@@ -552,6 +529,7 @@ if (
 
       title:
         "Invoice generated",
+      dedupeKey: `invoice-issued:${input.invoiceId}:${input.providerUserId}`,
 
       message:
         `Invoice ${
@@ -723,7 +701,7 @@ export async function notifyPaymentReceived(input: {
 
       actionUrl:
         input.jobId
-          ? `/technician/jobs/${input.jobId}`
+          ? `/technician/all-jobs/${input.jobId}`
           : undefined,
 
       metadata: {

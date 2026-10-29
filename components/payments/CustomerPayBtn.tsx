@@ -1,87 +1,52 @@
 "use client";
-
-import React, { useState } from "react";
-import { Button } from "../ui/button";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
-import axios from "axios";
-
-function loadScript(src: string) {
-  return new Promise<boolean>((resolve) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve(true);
+type CheckoutResult = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
+type CheckoutOptions = { key: string; amount: number; currency: string; name: string; description: string; order_id: string; prefill: { name: string; contact: string; email: string }; handler: (result: CheckoutResult) => Promise<void>; modal: { ondismiss: () => void } };
+declare global { interface Window { Razorpay?: new (options: CheckoutOptions) => { open(): void; on(event: string, callback: () => void): void } } }
+let checkoutScript: Promise<void> | undefined;
+function loadCheckout() {
+  if (window.Razorpay) return Promise.resolve();
+  checkoutScript ||= new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = src;
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
+    const fail = () => { clearTimeout(timeout); checkoutScript = undefined; script.remove(); reject(new Error("Could not load payment checkout. Please try again.")); };
+    const timeout = setTimeout(fail, 15000);
+    script.onload = () => { if (window.Razorpay) { clearTimeout(timeout); resolve(); } else fail(); };
+    script.onerror = fail;
     document.body.appendChild(script);
   });
+  return checkoutScript;
 }
-
-function CustomerPayBtn({
-  invoiceId,
-  customerName,
-  customerPhone,
-  customerEmail,
-}: {
-  invoiceId: string;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-}) {
+export default function CustomerPayBtn({ invoiceId, customerName, customerPhone, customerEmail, disabled = false }: { invoiceId: string; customerName?: string; customerPhone?: string; customerEmail?: string; disabled?: boolean }) {
   const [busy, setBusy] = useState(false);
-
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState(false);
+  const client = useQueryClient();
+  const refresh = () => { client.invalidateQueries({ queryKey: ["customer-invoices"] }); client.invalidateQueries({ queryKey: ["customer-invoicebyid"] }); client.invalidateQueries({ queryKey: ["customer-booking"] }); };
   async function pay() {
-    setBusy(true);
+    if (busy || disabled) return;
+    setBusy(true); setError(false); setMessage("");
     try {
-      const { data } = await axios.post(
-        `/api/invoices/${invoiceId}/razorpay/order`,
-      );
-
-      const ok = await loadScript(
-        "https://checkout.razorpay.com/v1/checkout.js",
-      );
-
-      if (!ok) {
-        throw new Error("Razorpay load script failed");
-      }
-
-      const options = {
-        key: data.keyId,
-        amount: data.order.amount,
-        currency: data.order.currency,
-        name: "Service Management System",
-        description: `Invoice ${invoiceId}`,
-        order_id: data.order.id,
-        prefill: {
-          name: customerName || "",
-          contact: customerPhone || "",
-          email: customerEmail || "",
+      await loadCheckout();
+      // The server rechecks ownership, payable state, and the amount at click time.
+      const { data } = await api.post<{ keyId: string; order: { id: string; amount: number; currency: string } }>(`/invoices/${invoiceId}/razorpay/order`);
+      if (!window.Razorpay) throw new Error("Checkout is unavailable");
+      const checkout = new window.Razorpay({ key: data.keyId, order_id: data.order.id, amount: data.order.amount, currency: data.order.currency, name: "Servizato", description: "Service invoice payment", prefill: { name: customerName || "", contact: customerPhone || "", email: customerEmail || "" },
+        modal: { ondismiss: () => { setBusy(false); setMessage("Checkout closed. Refreshing the current payment state."); refresh(); } },
+        handler: async response => {
+          setMessage("Checking payment confirmation…");
+          try { await api.post("/razorpay/verify", response); setMessage("Payment checked by the server. Your invoice is refreshing."); }
+          catch { setError(true); setMessage("Confirmation is pending. Refresh the invoice before trying again; a payment may still be processing."); }
+          finally { setBusy(false); refresh(); }
         },
-        handler: async (response: any) => {
-          await axios.post("/api/razorpay/verify", {
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-          });
-          alert("Payment successful and recorded");
-          window.location.reload();
-        },
-      };
-
-      // @ts-ignore
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    } catch (err: any) {
-      alert(err?.response?.data?.error || err.message || "Payment failed");
-    } finally {
-      setBusy(false);
-    }
+      });
+      checkout.on("payment.failed", () => { setBusy(false); setError(true); setMessage("Payment wasn’t completed. Your invoice is refreshing; try again when its current state is confirmed."); refresh(); });
+      checkout.open();
+    } catch { setBusy(false); setError(true); setMessage("Payment checkout is unavailable or this invoice is no longer payable. Refresh the invoice and try again."); refresh(); }
   }
-  return (
-    <Button onClick={pay} disabled={busy}>
-      {busy ? "opening payment" : "pay now"}
-    </Button>
-  );
+  return <div><Button className="public-button public-button-primary w-full" disabled={busy || disabled} onClick={pay}>{busy ? "Checking payment…" : "Pay securely with Razorpay"}</Button>{message && <p role={error ? "alert" : "status"} className={`mt-3 text-xs leading-6 ${error ? "text-primary" : "text-muted-foreground"}`}>{message}</p>}</div>;
 }
-
-export default CustomerPayBtn;

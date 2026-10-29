@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { requireRole } from "@/lib/auth";
+import { requireRole, ApiAuthError } from "@/lib/auth";
+import { apiFailure } from "@/lib/api-response";
+import { withAssignedJob } from "@/lib/assigned-job-transaction";
 import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
 import Job from "@/models/job";
 import Booking from "@/models/booking";
-import { notifyInvoiceIssued, notifyJobStatus, notifyServiceCompleted } from "@/lib/notify-events";
+import Technician from "@/models/technician";
+import {
+  notifyInvoiceIssued,
+  notifyServiceCompleted,
+} from "@/lib/notify-events";
 import "@/models/customer";
 import "@/models/user";
 import { generateInvoiceForJob } from "@/lib/billing/generateInvoiceForJob";
@@ -45,8 +51,6 @@ import { getJobNotificationRecipients } from "@/lib/notification-recipents";
 //     }
 
 //     job.status = "completed";
-
-    
 
 //     const booking = await Booking.findById(job.bookingId).populate({
 //       path: "customerId",
@@ -134,378 +138,123 @@ import { getJobNotificationRecipients } from "@/lib/notification-recipents";
 
 export async function POST(
   _request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{
-      id: string;
-    }>;
-  },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } =
-      await params;
-
-    await requireRole([
-      "technician",
-    ]);
-
-    const { tech } =
-      await requireTechnicianProfile();
-
+    const { id } = await params;
+    await requireRole(["technician"]);
+    const { tech } = await requireTechnicianProfile();
     await connectToDb();
-
-    const job =
-      await Job.findById(id);
-
-    if (!job) {
-      return NextResponse.json(
-        {
-          error: "Job not found",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
-    if (
-      String(job.technicianId) !==
-      String(tech._id)
-    ) {
-      return NextResponse.json(
-        {
-          error: "Forbidden",
-        },
-        {
-          status: 403,
-        },
-      );
-    }
-
-    /*
-     * IMPORTANT:
-     *
-     * Allow retry if the job is already completed
-     * but invoice generation failed previously.
-     */
-    if (
-      job.status !==
-        "in_progress" &&
-      job.status !==
-        "on_hold" &&
-      job.status !==
-        "completed"
-    ) {
-      return NextResponse.json(
-        {
-          error:
+    const completion = await withAssignedJob(
+      id,
+      String(tech._id),
+      async ({ job: assigned, session }) => {
+        if (!["in_progress", "on_hold", "completed"].includes(assigned.status))
+          throw new ApiAuthError(
             "Job must be in progress before completion",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    /*
-     * Proof is required only when we are
-     * transitioning into completed.
-     */
-    if (
-      job.status !==
-        "completed" &&
-      job.proofRequired &&
-      (!job.proofIds ||
-        job.proofIds.length === 0)
-    ) {
-      return NextResponse.json(
-        {
-          error:
+            400,
+          );
+        if (
+          assigned.status !== "completed" &&
+          assigned.proofRequired &&
+          !assigned.proofIds?.length
+        )
+          throw new ApiAuthError(
             "Proof is required before completing the job",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    /*
-     * Complete job if it is not already completed.
-     */
-    if (
-      job.status !==
-      "completed"
-    ) {
-      job.status =
-        "completed";
-
-      job.endTime =
-        new Date();
-
-      await job.save();
-    }
-
-    /*
-     * Load booking.
-     */
-    const booking =
-      await Booking.findById(
-        job.bookingId,
-      ).populate({
-        path: "customerId",
-        populate: {
-          path: "userId",
-        },
-      });
-
-    if (!booking) {
-      return NextResponse.json(
-        {
-          error:
-            "Booking not found",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
-    /*
-     * Generate invoice.
-     *
-     * The helper is idempotent:
-     * if invoice already exists,
-     * it returns the same invoice.
-     */
+            400,
+          );
+        const transitioned = assigned.status !== "completed";
+        if (transitioned) {
+          assigned.status = "completed";
+          assigned.endTime = new Date();
+          await assigned.save({ session });
+          const otherActiveJobs = await Job.countDocuments({
+            technicianId: tech._id,
+            _id: { $ne: assigned._id },
+            status: {
+              $in: [
+                "assigned",
+                "enroute",
+                "arrived",
+                "otp_verified",
+                "in_progress",
+                "on_hold",
+              ],
+            },
+          }).session(session);
+          const counted = await Technician.updateOne(
+            { _id: tech._id, isActive: { $ne: false } },
+            {
+              $inc: { jobsCompleted: 1 },
+              ...(otherActiveJobs === 0
+                ? { $set: { status: "available" } }
+                : {}),
+            },
+            { session },
+          );
+          if (counted.matchedCount !== 1)
+            throw new ApiAuthError(
+              "Active Pro profile changed. Refresh before continuing.",
+              409,
+            );
+        }
+        return { job: assigned, transitioned };
+      },
+    );
+    const { job } = completion;
+    const booking = await Booking.findById(job.bookingId).populate({
+      path: "customerId",
+      populate: { path: "userId" },
+    });
+    if (!booking)
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    const recipients = await getJobNotificationRecipients(String(job._id));
+    // Existing recipient-scoped notification dedupe makes partial delivery safely retryable.
+    await notifyServiceCompleted({
+      customerUserId: recipients.customerUserId || undefined,
+      providerUserId: recipients.providerUserId || undefined,
+      technicianUserId: recipients.technicianUserId || undefined,
+      jobId: String(job._id),
+      bookingId: String(job.bookingId),
+      serviceName: booking.serviceType,
+    });
+    // Legacy global Pro coordinates have no trusted job provenance. Preserve the
+    // existing last-work location; Job.endTime records completion without inventing GPS.
+    // A completed replay may repair a failed invoice operation without completing work again.
     let invoice;
-
     try {
-      invoice =
-        await generateInvoiceForJob(
-          job._id,
-        );
-    } catch (invoiceError: any) {
-      console.error(
-        "Invoice generation failed:",
-        invoiceError,
-      );
-
-      /*
-       * IMPORTANT:
-       *
-       * Job is completed, but invoice wasn't
-       * generated. Return a clear error so it
-       * can be retried without re-running the
-       * service itself.
-       */
+      invoice = await generateInvoiceForJob(job._id);
+    } catch {
+      console.error("Invoice generation failed after job completion.");
       return NextResponse.json(
         {
           error:
-            invoiceError.message ||
-            "Job completed but invoice generation failed",
+            "The service is complete, but its invoice could not be generated. Retry invoice generation.",
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       );
-    };
-
-    //-------------------------
-    // Notify customer , provider , technician for completion of job
-
-    const recipients =
-  await getJobNotificationRecipients(
-    job._id.toString(),
-  );
-
-  await notifyServiceCompleted({
-  customerUserId:
-    recipients.customerUserId ||
-    undefined,
-
-  providerUserId:
-    recipients.providerUserId ||
-    undefined,
-
-  technicianUserId:
-    recipients.technicianUserId ||
-    undefined,
-
-  jobId:
-    job._id.toString(),
-
-  bookingId:
-    job.bookingId.toString(),
-
-  serviceName:
-    booking.serviceType,
-});
-
-await notifyInvoiceIssued({
-  customerUserId:
-    recipients.customerUserId ||
-    undefined,
-
-  providerUserId:
-    recipients.providerUserId ||
-    undefined,
-
-  invoiceId:
-    invoice._id.toString(),
-
-  bookingId:
-    booking._id.toString(),
-
-  invoiceNumber:
-    invoice.invoiceNumber,
-
-  amount:
-    invoice.balanceDue,
-});
-
-    /*
-     * Notify customer that the service is
-     * completed and invoice is available.
-     */
-    // const customer: any =
-    //   booking.customerId;
-
-    // const customerUserId =
-    //   customer?.userId?._id
-    //     ? String(
-    //         customer.userId._id,
-    //       )
-    //     : null;
-
-    // if (customerUserId) {
-    //   await notifyJobStatus({
-    //     customerUserId,
-
-    //     jobId:
-    //       job._id.toString(),
-
-    //     bookingId:
-    //       String(job.bookingId),
-
-    //     title:
-    //       "Service completed",
-
-    //     message:
-    //       `Your service is completed. Invoice ${invoice.invoiceNumber} is ready for payment.`,
-    //   });
-    // }
-
-    /*
-     * Check if technician has other active jobs.
-     */
-    const otherActiveJobs =
-      await Job.countDocuments({
-        technicianId:
-          tech._id,
-
-        _id: {
-          $ne: job._id,
-        },
-
-        status: {
-          $in: [
-            "assigned",
-            "enroute",
-            "arrived",
-            "otp_verified",
-            "in_progress",
-            "on_hold",
-          ],
-        },
-      });
-
-    if (
-      otherActiveJobs === 0
-    ) {
-      tech.status =
-        "available";
     }
-
-    tech.jobsCompleted =
-      (tech.jobsCompleted || 0) +
-      1;
-
-    /*
-     * Save last completed location.
-     */
-    tech.lastCompletedWorkLocation =
-      {
-        type: "Point",
-
-        coordinates:
-          tech.currentLocation
-            ?.coordinates ||
-          [0, 0],
-
-        updatedAt:
-          new Date(),
-
-        addressText:
-          booking.address
-            ?.addressLine ||
-          "",
-
-        jobId:
-          job._id,
-      };
-
-    await tech.save();
-
+    await notifyInvoiceIssued({
+      customerUserId: recipients.customerUserId || undefined,
+      providerUserId: recipients.providerUserId || undefined,
+      invoiceId: String(invoice._id),
+      bookingId: String(booking._id),
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.balanceDue,
+    });
     return NextResponse.json({
       success: true,
-
-      job: {
-        id: job._id,
-
-        status:
-          job.status,
-
-        invoiceId:
-          invoice._id,
-      },
-
+      job: { id: job._id, status: job.status, invoiceId: invoice._id },
       invoice: {
-        id:
-          invoice._id,
-
-        invoiceNumber:
-          invoice.invoiceNumber,
-
-        status:
-          invoice.status,
-
-        grandTotal:
-          invoice.grandTotal,
-
-        amountPaid:
-          invoice.amountPaid,
-
-        balanceDue:
-          invoice.balanceDue,
+        id: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        status: invoice.status,
+        grandTotal: invoice.grandTotal,
+        amountPaid: invoice.amountPaid,
+        balanceDue: invoice.balanceDue,
       },
     });
-  } catch (err: any) {
-    console.error(
-      "Complete job error:",
-      err,
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          err.message ||
-          "Server error",
-      },
-      {
-        status:
-          err.status || 500,
-      },
-    );
+  } catch (error) {
+    return apiFailure(error);
   }
 }

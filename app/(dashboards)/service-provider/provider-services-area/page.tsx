@@ -1,9 +1,4 @@
-import React from 'react'
-
-function ProviderServiceArea() {
-  return (
-    <div>Coming soon....</div>
-  )
+import { ServiceAreasManager } from "@/components/provider/ServiceAreasManager";
+export default function Page() {
+  return <ServiceAreasManager />;
 }
-
-export default ProviderServiceArea

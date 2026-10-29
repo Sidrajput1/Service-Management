@@ -1,65 +1,72 @@
 "use client";
-
+import { useEffect } from "react";
 import api from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
+import {
+  cancelNotificationReads,
+  notificationQueryOptions,
+  notificationWriteConfirmed,
+  subscribeNotificationUpdates,
+} from "@/lib/notification-client.mjs";
 
-export function useNotifications(limit=20){
-    return useQuery({
-        queryKey:["notifications",limit],
-        queryFn:async () => {
-            const {data} = await api.get(`/notifications?limit=${limit}`);
-            return data;
-        },
-    });
-};
-
-// export function useUnreadNotifications(){
-//     return useQuery({
-//         queryKey:["notifications-unread"],
-//         queryFn:async () => {
-//             const {data} = await api.get("/notifications?limit=1&unreadOnly=true");
-//             return data;
-//         },
-
-//         refetchInterval:15000,
-//     });
-// };
-
-export function useUnreadNotifications() {
+function useNotificationScope() {
+  const { data: session, status } = useSession();
+  return {
+    userId: session?.user?.id,
+    enabled: status === "authenticated" && Boolean(session?.user?.id),
+  };
+}
+function useNotificationUpdates(userId?: string) {
+  const client = useQueryClient();
+  useEffect(
+    () => subscribeNotificationUpdates(client, userId),
+    [client, userId],
+  );
+}
+const fetchNotifications = async (
+  path: string,
+  options: { signal: AbortSignal },
+) => (await api.get(path, options)).data;
+export function useNotifications(limit = 20, cursor?: string) {
+  const scope = useNotificationScope();
+  useNotificationUpdates(scope.enabled ? scope.userId : undefined);
   return useQuery({
-    queryKey: ["notifications-unread"],
-    queryFn: async () => {
-      const { data } = await api.get("/notifications?limit=1&unreadOnly=true");
-      return data;
-    },
-    refetchInterval: 15000,
+    ...notificationQueryOptions(scope.userId, fetchNotifications, {
+      limit,
+      cursor,
+    }),
+    enabled: scope.enabled,
   });
 }
-
-export function useMarkNotificationRead(){
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn:async(id:string) => {
-            const {data} = await api.put(`/notifications/${id}`,{status:"read"});
-            return data;
-        },
-        onSuccess:() => {
-            qc.invalidateQueries({queryKey:["notifications"]});
-            qc.invalidateQueries({queryKey:["notifications-unread"]});
-        },
-    });
-};
-
-export function useMarkAllNotificationsRead() {
-  const qc = useQueryClient();
+export function useUnreadNotifications() {
+  const scope = useNotificationScope();
+  useNotificationUpdates(scope.enabled ? scope.userId : undefined);
+  return useQuery({
+    ...notificationQueryOptions(scope.userId, fetchNotifications, {
+      limit: 5,
+      unreadOnly: true,
+    }),
+    enabled: scope.enabled,
+  });
+}
+export function useMarkNotificationRead() {
+  const client = useQueryClient(),
+    scope = useNotificationScope();
   return useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post("/notifications/mark-all-read");
-      return data;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-      qc.invalidateQueries({ queryKey: ["notifications-unread"] });
-    },
+    mutationFn: async (id: string) =>
+      (await api.put(`/notifications/${id}`, { status: "read" })).data,
+    onMutate: () => cancelNotificationReads(client, scope.userId),
+    onSuccess: () => notificationWriteConfirmed(client, scope.userId),
+  });
+}
+export function useMarkAllNotificationsRead() {
+  const client = useQueryClient(),
+    scope = useNotificationScope();
+  return useMutation({
+    mutationFn: async () =>
+      (await api.post("/notifications/mark-all-read")).data,
+    onMutate: () => cancelNotificationReads(client, scope.userId),
+    onSuccess: () => notificationWriteConfirmed(client, scope.userId),
   });
 }

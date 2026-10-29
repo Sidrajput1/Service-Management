@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { toast } from "sonner";
+import { CancellationPanel } from "@/components/finance/BookingActions";
 
 import {
   useAssignTechnician,
@@ -25,7 +26,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { useProviderAssignedJob, useProviderAssignedJobs } from "@/hooks/useProviderAssignedJobs";
+import {
+  useProviderAssignedJob,
+  useProviderAssignedJobs,
+} from "@/hooks/useProviderAssignedJobs";
 
 function currency(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -43,7 +47,6 @@ export default function ProviderBookingDetailPage() {
 
   const { data, isLoading, isError } = useProviderBooking(bookingId);
 
-  console.log("booking data",data);
 
   //const job2 = data.technicians
   //const {data:jobdata} = useProviderAssignedJob()
@@ -54,7 +57,7 @@ export default function ProviderBookingDetailPage() {
 
   const job = data?.job;
 
-  const assignTechnician = useAssignTechnician(bookingId);
+  const assignPro = useAssignTechnician(bookingId);
 
   const booking = data?.booking;
   const technicians = data?.technicians || [];
@@ -94,13 +97,13 @@ export default function ProviderBookingDetailPage() {
 
   const pricing = booking.pricing;
 
-  const assignedTechnician = booking.technicianId;
+  const assignedPro = booking.technicianId;
 
   async function handleAssign(technicianId: string) {
     try {
-      await assignTechnician.mutateAsync(technicianId);
+      await assignPro.mutateAsync(technicianId);
 
-      toast.success("Technician assigned successfully");
+      toast.success("Pro assigned successfully");
     } catch (error: any) {
       toast.error(
         error?.response?.data?.error || "Unable to assign technician",
@@ -138,6 +141,7 @@ export default function ProviderBookingDetailPage() {
         </div>
       </div>
 
+      <CancellationPanel bookingId={bookingId}/>
       <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
         {/* Main */}
         <div className="space-y-6">
@@ -184,8 +188,10 @@ export default function ProviderBookingDetailPage() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-slate-950 p-4 text-white">
-                  <p className="text-xs text-slate-400">Customer price</p>
+                <div className="rounded-2xl bg-card p-4 text-foreground">
+                  <p className="text-xs text-muted-foreground">
+                    Customer price
+                  </p>
 
                   <p className="mt-1 text-lg font-semibold">
                     {currency(
@@ -300,7 +306,7 @@ export default function ProviderBookingDetailPage() {
           {/* Assignment */}
           <Card className="rounded-2xl border-border/70">
             <CardHeader>
-              <CardTitle>Assign Technician</CardTitle>
+              <CardTitle>Assign Pro</CardTitle>
 
               <p className="text-sm text-muted-foreground">
                 Select a technician who will fulfill this booking.
@@ -319,14 +325,14 @@ export default function ProviderBookingDetailPage() {
                   </p>
 
                   <Button asChild variant="outline" className="mt-4 rounded-xl">
-                    <a href="/service-provider/manage-technicians">Add Technician</a>
+                    <a href="/service-provider/manage-technicians">Add Pro</a>
                   </Button>
                 </div>
               ) : (
                 technicians.map((technician: any) => {
                   const isBusy = technician.status === "busy";
 
-                  const name = technician.userId?.name || "Technician";
+                  const name = technician.userId?.name || "Pro";
 
                   return (
                     <div
@@ -335,7 +341,7 @@ export default function ProviderBookingDetailPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-card text-sm font-semibold text-foreground">
                             {name.slice(0, 1).toUpperCase()}
                           </div>
 
@@ -378,16 +384,16 @@ export default function ProviderBookingDetailPage() {
                         variant={isBusy ? "outline" : "default"}
                         disabled={
                           isBusy ||
-                          assignTechnician.isPending ||
+                          assignPro.isPending ||
                           booking.status === "assigned"
                         }
                         onClick={() => handleAssign(technician._id)}
                       >
                         {booking.status === "assigned"
-                          ? "Technician Assigned"
+                          ? "Pro Assigned"
                           : isBusy
                             ? "Currently Busy"
-                            : "Assign Technician"}
+                            : "Assign Pro"}
                       </Button>
                     </div>
                   );
@@ -410,7 +416,7 @@ export default function ProviderBookingDetailPage() {
                 />
 
                 <StatusStep
-                  label="Technician assigned"
+                  label="Pro assigned"
                   complete={
                     booking.status === "assigned" ||
                     Boolean(booking.technicianId)
@@ -425,48 +431,37 @@ export default function ProviderBookingDetailPage() {
           </Card>
 
           {job ? (
-  <div className="rounded-2xl border p-4">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="text-xs text-muted-foreground">
-          Assigned Job
-        </p>
+            <div className="rounded-2xl border p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">Assigned Job</p>
 
-        <p className="mt-1 text-lg font-semibold">
-          {job.status}
-        </p>
+                  <p className="mt-1 text-lg font-semibold">{job.status}</p>
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          This booking has moved into technician execution.
-        </p>
-      </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This booking has moved into technician execution.
+                  </p>
+                </div>
 
-      <Button
-        asChild
-        className="rounded-xl"
-      >
-        <Link
-          href={`/service-provider/assigned-jobs/${job._id}`}
-        >
-          View Assigned Job
-          <ArrowRight className="ml-2 h-4 w-4 inline" />
-        </Link>
-      </Button>
-    </div>
-  </div>
-) : (
-  <div className="rounded-2xl border p-4">
-    <p className="font-medium">
-      Technician not assigned
-    </p>
+                <Button asChild className="rounded-xl">
+                  <Link href={`/service-provider/assigned-jobs/${job._id}`}>
+                    View Assigned Job
+                    <ArrowRight className="ml-2 h-4 w-4 inline" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border p-4">
+              <p className="font-medium">Pro not assigned</p>
 
-    <p className="mt-1 text-sm text-muted-foreground">
-      Assign a technician to create the operational job.
-    </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Assign a technician to create the operational job.
+              </p>
 
-    {/* your existing assign technician UI */}
-  </div>
-)}
+              {/* your existing assign technician UI */}
+            </div>
+          )}
         </div>
       </div>
     </div>

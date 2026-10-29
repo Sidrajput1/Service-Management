@@ -16,12 +16,7 @@ import {
 
 import { useProviderAssignedJobs } from "@/hooks/useProviderAssignedJobs";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -171,66 +166,46 @@ export default function ProviderAssignedJobsPage() {
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
 
-  const {
-    data,
-    isLoading,
-    isError,
-  } = useProviderAssignedJobs(status);
+  const { data, isLoading, isError } = useProviderAssignedJobs(status);
 
   const jobs = data?.jobs || [];
 
-  const filteredJobs = jobs.filter(
-    (job: any) => {
-      const value = search.trim().toLowerCase();
+  const filteredJobs = jobs.filter((job: any) => {
+    const value = search.trim().toLowerCase();
 
-      if (!value) return true;
+    if (!value) return true;
 
-      const serviceName =
-        job.bookingId?.serviceOfferingId?.name ||
-        job.bookingId?.serviceType ||
-        "";
+    const serviceName =
+      job.bookingId?.serviceOfferingId?.name ||
+      job.bookingId?.serviceType ||
+      "";
 
-      const customerName =
-        job.bookingId?.customerId?.name ||
-        "";
+    const customerName = job.bookingId?.customerId?.name || "";
 
-      const technicianName =
-        job.technicianId?.userId?.name ||
-        "";
+    const technicianName = job.technicianId?.userId?.name || "";
 
-      const city =
-        job.bookingId?.address?.city ||
-        "";
+    const city = job.bookingId?.address?.city || "";
 
-      return (
-        serviceName.toLowerCase().includes(value) ||
-        customerName.toLowerCase().includes(value) ||
-        technicianName.toLowerCase().includes(value) ||
-        city.toLowerCase().includes(value)
-      );
-    },
-  );
+    return (
+      serviceName.toLowerCase().includes(value) ||
+      customerName.toLowerCase().includes(value) ||
+      technicianName.toLowerCase().includes(value) ||
+      city.toLowerCase().includes(value)
+    );
+  });
 
   const stats = {
     total: jobs.length,
 
-    assigned: jobs.filter(
-      (job: any) => job.status === "assigned",
-    ).length,
+    assigned: jobs.filter((job: any) => job.status === "assigned").length,
 
     active: jobs.filter((job: any) =>
-      [
-        "enroute",
-        "arrived",
-        "otp_verified",
-        "in_progress",
-        "on_hold",
-      ].includes(job.status),
+      ["enroute", "arrived", "otp_verified", "in_progress", "on_hold"].includes(
+        job.status,
+      ),
     ).length,
 
-    completed: jobs.filter(
-      (job: any) => job.status === "completed",
-    ).length,
+    completed: jobs.filter((job: any) => job.status === "completed").length,
   };
 
   if (isLoading) {
@@ -263,9 +238,7 @@ export default function ProviderAssignedJobsPage() {
     return (
       <Card className="rounded-2xl">
         <CardContent className="p-10 text-center">
-          <h2 className="font-semibold">
-            Unable to load assigned jobs
-          </h2>
+          <h2 className="font-semibold">Unable to load assigned jobs</h2>
 
           <p className="mt-2 text-sm text-muted-foreground">
             Please refresh the page and try again.
@@ -278,10 +251,10 @@ export default function ProviderAssignedJobsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="rounded-3xl bg-slate-950 p-6 text-white sm:p-8">
+      <section className="rounded-3xl bg-card p-6 text-foreground sm:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Badge className="mb-3 rounded-full bg-white/10 text-white hover:bg-white/10">
+            <Badge className="mb-3 rounded-full bg-muted text-foreground hover:bg-muted">
               Operations
             </Badge>
 
@@ -289,16 +262,13 @@ export default function ProviderAssignedJobsPage() {
               Assigned Jobs
             </h1>
 
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-              Monitor technician execution from assignment
-              through completion.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Monitor technician execution from assignment through completion.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-            <p className="text-xs text-slate-400">
-              Active now
-            </p>
+          <div className="rounded-2xl border border-border bg-muted/50 px-4 py-3">
+            <p className="text-xs text-muted-foreground">Active now</p>
 
             <p className="mt-1 text-2xl font-bold text-center text-brand-coral animate animate-pulse">
               {stats.active}
@@ -309,23 +279,11 @@ export default function ProviderAssignedJobsPage() {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          label="Total jobs"
-          value={stats.total}
-          icon={Wrench}
-        />
+        <SummaryCard label="Total jobs" value={stats.total} icon={Wrench} />
 
-        <SummaryCard
-          label="Assigned"
-          value={stats.assigned}
-          icon={UserRound}
-        />
+        <SummaryCard label="Assigned" value={stats.assigned} icon={UserRound} />
 
-        <SummaryCard
-          label="Active"
-          value={stats.active}
-          icon={Clock3}
-        />
+        <SummaryCard label="Active" value={stats.active} icon={Clock3} />
 
         <SummaryCard
           label="Completed"
@@ -343,9 +301,7 @@ export default function ProviderAssignedJobsPage() {
 
               <Input
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search job, customer, technician..."
                 className="h-11 rounded-xl pl-10"
               />
@@ -356,15 +312,9 @@ export default function ProviderAssignedJobsPage() {
                 <Button
                   key={option.value}
                   type="button"
-                  variant={
-                    status === option.value
-                      ? "default"
-                      : "outline"
-                  }
+                  variant={status === option.value ? "default" : "outline"}
                   className="rounded-xl"
-                  onClick={() =>
-                    setStatus(option.value)
-                  }
+                  onClick={() => setStatus(option.value)}
                 >
                   {option.label}
                 </Button>
@@ -380,10 +330,7 @@ export default function ProviderAssignedJobsPage() {
       ) : (
         <div className="space-y-4">
           {filteredJobs.map((job: any) => (
-            <JobCard
-              key={job._id}
-              job={job}
-            />
+            <JobCard key={job._id} job={job} />
           ))}
         </div>
       )}
@@ -405,13 +352,9 @@ function SummaryCard({
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm text-muted-foreground">
-              {label}
-            </p>
+            <p className="text-sm text-muted-foreground">{label}</p>
 
-            <p className="mt-2 text-2xl font-semibold">
-              {value}
-            </p>
+            <p className="mt-2 text-2xl font-semibold">{value}</p>
           </div>
 
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
@@ -423,35 +366,21 @@ function SummaryCard({
   );
 }
 
-function JobCard({
-  job,
-}: {
-  job: any;
-}) {
+function JobCard({ job }: { job: any }) {
   const booking = job.bookingId;
   const technician = job.technicianId;
 
   const service =
-    booking?.serviceOfferingId?.name ||
-    booking?.serviceType ||
-    "Service";
+    booking?.serviceOfferingId?.name || booking?.serviceType || "Service";
 
-  const customer =
-    booking?.customerId?.name ||
-    "Customer";
+  const customer = booking?.customerId?.name || "Customer";
 
-  const technicianName =
-    technician?.userId?.name ||
-    "Technician";
+  const technicianName = technician?.userId?.name || "Pro";
 
-  const progress = getProgress(
-    job.status,
-  );
+  const progress = getProgress(job.status);
 
   const finalPrice =
-    booking?.pricing?.finalPrice ||
-    booking?.estimatedPrice ||
-    0;
+    booking?.pricing?.finalPrice || booking?.estimatedPrice || 0;
 
   return (
     <Card className="overflow-hidden rounded-2xl border-border/70 transition hover:-translate-y-0.5 hover:shadow-md">
@@ -459,24 +388,16 @@ function JobCard({
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           {/* Main */}
           <div className="flex min-w-0 gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-card text-foreground">
               <Wrench className="h-5 w-5" />
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-semibold">
-                  {service}
-                </h2>
+                <h2 className="font-semibold">{service}</h2>
 
-                <Badge
-                  className={`rounded-full ${getStatusClass(
-                    job.status,
-                  )}`}
-                >
-                  {getStatusLabel(
-                    job.status,
-                  )}
+                <Badge className={`rounded-full ${getStatusClass(job.status)}`}>
+                  {getStatusLabel(job.status)}
                 </Badge>
               </div>
 
@@ -493,24 +414,16 @@ function JobCard({
 
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5" />
-                  {booking?.address?.city ||
-                    "Location"}
+                  {booking?.address?.city || "Location"}
                 </span>
 
                 <span className="inline-flex items-center gap-1.5">
                   <CalendarClock className="h-3.5 w-3.5" />
                   {job.scheduledAt
-                    ? new Date(
-                        job.scheduledAt,
-                      ).toLocaleString(
-                        "en-IN",
-                        {
-                          dateStyle:
-                            "medium",
-                          timeStyle:
-                            "short",
-                        },
-                      )
+                    ? new Date(job.scheduledAt).toLocaleString("en-IN", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
                     : "Flexible"}
                 </span>
               </div>
@@ -522,9 +435,7 @@ function JobCard({
                     Job progress
                   </span>
 
-                  <span className="text-xs font-medium">
-                    {progress}%
-                  </span>
+                  <span className="text-xs font-medium">{progress}%</span>
                 </div>
 
                 <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -542,30 +453,19 @@ function JobCard({
           {/* Right */}
           <div className="flex items-center justify-between gap-6 xl:justify-end">
             <div className="text-right">
-              <p className="text-xs text-muted-foreground">
-                Booking value
-              </p>
+              <p className="text-xs text-muted-foreground">Booking value</p>
 
               <p className="mt-1 text-lg font-semibold">
-                {currency(
-                  Number(finalPrice),
-                )}
+                {currency(Number(finalPrice))}
               </p>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                Payment:{" "}
-                {job.paymentStatus ||
-                  "unbilled"}
+                Payment: {job.paymentStatus || "unbilled"}
               </p>
             </div>
 
-            <Button
-              asChild
-              className="rounded-xl"
-            >
-              <Link
-                href={`/service-provider/assigned-jobs/${job._id}`}
-              >
+            <Button asChild className="rounded-xl">
+              <Link href={`/service-provider/assigned-jobs/${job._id}`}>
                 View Job
                 <ArrowRight className="ml-2 h-4 w-4 inline" />
               </Link>
@@ -585,23 +485,15 @@ function EmptyJobs() {
           <Wrench className="h-6 w-6 text-muted-foreground" />
         </div>
 
-        <h3 className="mt-4 text-lg font-semibold">
-          No assigned jobs
-        </h3>
+        <h3 className="mt-4 text-lg font-semibold">No assigned jobs</h3>
 
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-          Jobs will appear here once you assign a technician
-          to an accepted booking.
+          Jobs will appear here once you assign a technician to an accepted
+          booking.
         </p>
 
-        <Button
-          asChild
-          variant="outline"
-          className="mt-5 rounded-xl"
-        >
-          <Link href="/service-provider/bookings">
-            View Bookings
-          </Link>
+        <Button asChild variant="outline" className="mt-5 rounded-xl">
+          <Link href="/service-provider/bookings">View Bookings</Link>
         </Button>
       </CardContent>
     </Card>

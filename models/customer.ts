@@ -1,3 +1,8 @@
+import {
+  serviceLocationFields,
+  installServiceLocationPrivacy,
+  type LocationConfirmation,
+} from "./service-location-fields";
 // models/Customer.ts
 import mongoose, { Schema, Document, Model } from "mongoose";
 
@@ -5,8 +10,10 @@ export interface IAddress {
   label?: string;
   addressLine?: string;
   city?: string;
+  locality?: string;
   state?: string;
   pincode?: string;
+  locationConfirmation?: LocationConfirmation;
   location?: {
     type: "Point";
     coordinates: [number, number]; // [lng, lat]
@@ -30,12 +37,10 @@ const AddressSchema = new Schema<IAddress>(
     label: String,
     addressLine: String,
     city: String,
+    locality: String,
     state: String,
     pincode: String,
-    location: {
-      type: { type: String, enum: ["Point"], default: "Point" },
-      coordinates: { type: [Number], default: [0, 0] },
-    },
+    ...serviceLocationFields,
     metadata: Schema.Types.Mixed,
   },
   { _id: false },
@@ -45,7 +50,12 @@ AddressSchema.index({ location: "2dsphere" });
 
 const CustomerSchema = new Schema<ICustomer>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User",unique:true,sparse:true },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      unique: true,
+      sparse: true,
+    },
     name: { type: String, required: true },
     phone: { type: String, index: true },
     email: String,
@@ -55,6 +65,7 @@ const CustomerSchema = new Schema<ICustomer>(
   { timestamps: true },
 );
 
+installServiceLocationPrivacy(CustomerSchema);
 const Customer: Model<ICustomer> =
   mongoose.models.Customer ||
   mongoose.model<ICustomer>("Customer", CustomerSchema);

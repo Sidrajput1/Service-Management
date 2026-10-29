@@ -102,27 +102,28 @@ export default function ProviderFinancePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="rounded-3xl bg-slate-950 p-6 text-white sm:p-8">
+      <section className="rounded-3xl bg-card p-6 text-foreground sm:p-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Badge className="mb-3 rounded-full bg-white/10 text-white hover:bg-white/10">
+            <Badge className="mb-3 rounded-full bg-muted text-foreground hover:bg-muted">
               Finance
             </Badge>
 
             <h1 className="text-3xl font-semibold tracking-tight">
-              Finance & Revenue
+              Business invoices & payments
             </h1>
 
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               Track revenue, customer payments, outstanding invoices, and
               financial performance.
             </p>
+            <div className="mt-5 flex flex-wrap gap-3"><Link className="inline-flex min-h-11 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground" href="/service-provider/finance/earnings">Earnings, commission & payouts</Link><Link className="inline-flex min-h-11 items-center rounded-xl border border-border px-4 text-sm font-medium" href="/service-provider/finance/settings">Payout details</Link></div>
           </div>
 
           {/* <Button
             asChild
             variant="outline"
-            className="rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+            className="rounded-xl border-white/15 bg-muted/50 text-foreground hover:bg-muted hover:text-foreground"
           >
             <Link href="/service-provider/finance/invoices">
               <FileText className="mr-2 h-4 w-4" />

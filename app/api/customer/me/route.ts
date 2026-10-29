@@ -1,19 +1,8 @@
-import { NextResponse } from "next/server";
 import { requireCustomerProfile } from "@/lib/customer";
-
+import { apiFailure, privateJson } from "@/lib/api-response";
 export async function GET() {
   try {
-    const {customer,user} = await requireCustomerProfile();
-    console.log(customer);
-
-    return NextResponse.json({
-      user,
-      customer,
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.status || 500 }
-    );
-  }
+    const { customer, user } = await requireCustomerProfile();
+    return privateJson({ user: { id: user._id, name: user.name, email: user.email, phone: user.phone }, customer });
+  } catch (error) { return apiFailure(error); }
 }

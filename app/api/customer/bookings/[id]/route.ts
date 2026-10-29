@@ -1,89 +1,23 @@
+import { serviceAddressForViewer } from "@/lib/service-location.mjs";
 import { NextResponse } from "next/server";
+import { apiFailure, privateHeaders } from "@/lib/api-response";
+import { objectIdSchema } from "@/lib/pagination";
 
-import { requireCustomer, requireCustomerProfile } from "@/lib/customer";
+import { requireCustomerProfile } from "@/lib/customer";
 
 import { connectToDb } from "@/lib/db";
-import { buildCustomerTimeline } from "@/lib/customer-timeline";
-//import Booking from "@/models/booking";
+
 import Job from "@/models/job";
 import Invoice from "@/models/invoice";
-import Payment from "@/models/payment";
-import Lead from "@/models/lead";
-import { ServiceOffering, Customer, Booking } from "@/models/index";
-import ServiceProvider from "@/models/ServiceProvider";
+
+import { Booking } from "@/models/index";
+import "@/models/ServiceProvider";
 import "@/models/jobProof";
 import "@/models/technician";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 
 export const runtime = "nodejs";
-
-// export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-//   try {
-//     await connectToDb();
-//     const { customer } = await requireCustomerProfile();
-
-//     const {id} = await params;
-//     const booking = await Booking.findById(id)
-//       .populate("customerId")
-//       .populate("leadId")
-//       .lean();
-
-//     if (!booking) {
-//       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
-//     }
-
-//     if (String((booking as any).customerId?._id || (booking as any).customerId) !== String(customer._id)) {
-//       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-//     }
-
-//     const job = await Job.findOne({ bookingId: booking._id })
-//       .populate({
-//         path: "technicianId",
-//         populate: { path: "userId" },
-//       })
-//       .populate("proofIds")
-//       .lean();
-
-//     const invoice = await Invoice.findOne({ bookingId: booking._id }).lean();
-
-//     const payment = invoice
-//       ? await Payment.findOne({
-//           invoiceId: invoice._id,
-//           status: "success",
-//         })
-//           .sort({ createdAt: -1 })
-//           .lean()
-//       : null;
-
-//     const lead = booking.leadId
-//       ? (await Lead.findById((booking as any).leadId))?._id
-//       : null;
-
-//     const timeline = buildCustomerTimeline({
-//       lead: booking.leadId || lead,
-//       booking,
-//       job,
-//       invoice,
-//       payment,
-//     });
-
-//     return NextResponse.json({
-//       booking,
-//       job,
-//       invoice,
-//       payment,
-//       timeline,
-//     });
-//   } catch (err: any) {
-//     return NextResponse.json(
-//       { error: err.message || "Server error" },
-//       { status: err.status || 500 }
-//     );
-//   }
-// }
-
-// implement new get request for getting bookings id info .
 
 function getCustomerTracking(job: any, booking: any) {
   if (booking.status === "cancelled") {
@@ -203,23 +137,16 @@ function getCustomerTracking(job: any, booking: any) {
         progress: 1,
       };
   }
-};
+}
 
-// building time line
-
-function buildTimeline(
-  booking:any,
-  job:any,
-  invoice:any
-){
-  const jobStatus = job?.status
+function buildTimeline(booking: any, job: any, invoice: any) {
+  const jobStatus = job?.status;
 
   const timeline = [
     {
       key: "request_sent",
       title: "Request sent",
-      description:
-        "Your service request was created.",
+      description: "Your service request was created.",
       completed: true,
       current: false,
       timestamp: booking.createdAt,
@@ -228,122 +155,83 @@ function buildTimeline(
     {
       key: "provider_accepted",
       title: "Provider accepted",
-      description:
-        "The service provider accepted your request.",
+      description: "The service provider accepted your request.",
       completed:
-        [
-          "confirmed",
-          "assigned",
-        ].includes(booking.status) ||
-        Boolean(job),
+        ["confirmed", "assigned"].includes(booking.status) || Boolean(job),
       current: false,
-      timestamp:
-        booking.status !== "pending"
-          ? booking.updatedAt
-          : undefined,
+      timestamp: booking.status !== "pending" ? booking.updatedAt : undefined,
     },
 
     {
       key: "technician_assigned",
       title: "Technician assigned",
-      description:
-        "A technician has been assigned to your service.",
-      completed:
-        Boolean(job) ||
-        Boolean(booking.technicianId),
+      description: "A technician has been assigned to your service.",
+      completed: Boolean(job) || Boolean(booking.technicianId),
       current: false,
-      timestamp:
-        job?.createdAt,
+      timestamp: job?.createdAt,
     },
 
     {
       key: "technician_enroute",
       title: "Technician is on the way",
-      description:
-        "Your technician is travelling to your location.",
-      completed:
-        [
-          "enroute",
-          "arrived",
-          "otp_verified",
-          "in_progress",
-          "on_hold",
-          "completed",
-        ].includes(jobStatus),
-      current:
-        jobStatus === "enroute",
-      timestamp:
-        job?.acceptedAt,
+      description: "Your technician is travelling to your location.",
+      completed: [
+        "enroute",
+        "arrived",
+        "otp_verified",
+        "in_progress",
+        "on_hold",
+        "completed",
+      ].includes(jobStatus),
+      current: jobStatus === "enroute",
+      timestamp: job?.acceptedAt,
     },
 
     {
       key: "technician_arrived",
       title: "Technician arrived",
-      description:
-        "Your technician reached the service location.",
-      completed:
-        [
-          "arrived",
-          "otp_verified",
-          "in_progress",
-          "on_hold",
-          "completed",
-        ].includes(jobStatus),
-      current:
-        jobStatus === "arrived",
-      timestamp:
-        job?.arrivedAt,
+      description: "Your technician reached the service location.",
+      completed: [
+        "arrived",
+        "otp_verified",
+        "in_progress",
+        "on_hold",
+        "completed",
+      ].includes(jobStatus),
+      current: jobStatus === "arrived",
+      timestamp: job?.arrivedAt,
     },
 
     {
       key: "service_verified",
       title: "Service verified",
-      description:
-        "Customer verification was completed.",
-      completed:
-        [
-          "otp_verified",
-          "in_progress",
-          "on_hold",
-          "completed",
-        ].includes(jobStatus),
-      current:
-        jobStatus === "otp_verified",
-      timestamp:
-        job?.customerOtpVerifiedAt,
+      description: "Customer verification was completed.",
+      completed: [
+        "otp_verified",
+        "in_progress",
+        "on_hold",
+        "completed",
+      ].includes(jobStatus),
+      current: jobStatus === "otp_verified",
+      timestamp: job?.customerOtpVerifiedAt,
     },
 
     {
       key: "service_in_progress",
       title: "Service in progress",
-      description:
-        "Your technician is working on your service.",
-      completed:
-        [
-          "in_progress",
-          "on_hold",
-          "completed",
-        ].includes(jobStatus),
-      current:
-        [
-          "in_progress",
-          "on_hold",
-        ].includes(jobStatus),
-      timestamp:
-        job?.startTime,
+      description: "Your technician is working on your service.",
+      completed: ["in_progress", "on_hold", "completed"].includes(jobStatus),
+      current: ["in_progress", "on_hold"].includes(jobStatus),
+      timestamp: job?.startTime,
     },
 
     {
       key: "completed",
       title: "Service completed",
-      description:
-        "Your service has been completed successfully.",
-      completed:
-        jobStatus === "completed",
-      current:
-        jobStatus === "completed",
-      timestamp:
-        job?.endTime,
+      description: "Your service has been completed successfully.",
+      completed: jobStatus === "completed",
+      current: jobStatus === "completed",
+      timestamp: job?.endTime,
     },
   ];
   return timeline;
@@ -373,9 +261,9 @@ export async function GET(
 
     await connectToDb();
 
-    const { customer } = await requireCustomer(session.user.id);
+    const { customer } = await requireCustomerProfile();
 
-    const { id } = await params;
+    const id = objectIdSchema.parse((await params).id);
 
     /*
      * IMPORTANT:
@@ -386,6 +274,8 @@ export async function GET(
       _id: id,
       customerId: customer._id,
     })
+      .select("+address.location +address.locationConfirmation")
+      .setOptions({ includeServiceLocation: true })
       .populate(
         "serviceProviderId",
         "companyName businessType description email phone address status verificationStatus",
@@ -394,7 +284,11 @@ export async function GET(
         "serviceOfferingId",
         "name price taxPercent description offerEnabled offerName discountType discountValue",
       )
-      .populate("technicianId", "status isActive skills vehicleType userId")
+      .populate({
+        path: "technicianId",
+        select: "status isActive skills userId",
+        populate: { path: "userId", select: "name phone" },
+      })
       .lean();
 
     if (!booking) {
@@ -404,7 +298,7 @@ export async function GET(
         },
         { status: 404 },
       );
-    };
+    }
 
     /*
      * Job is scoped to both booking and provider.
@@ -415,79 +309,84 @@ export async function GET(
       serviceProviderId:
         booking.serviceProviderId?._id || booking.serviceProviderId,
     })
-      .populate("technicianId", "status isActive skills vehicleType userId")
-      // .populate(
-      //   "invoiceId",
-      //   "invoiceNumber status grandTotal amountPaid balanceDue razorpayPaymentId paymentReceivedAt",
-      // )
+      .select("+otp +otpExpiresAt")
+      .populate({
+        path: "technicianId",
+        select: "status isActive skills userId",
+        populate: { path: "userId", select: "name phone" },
+      })
       .lean();
 
-      /*
-      * Invoice is attaced through the job
-      */
+    /*
+     * Invoice is attaced through the job
+     */
 
-      let invoice = null;
+    let invoice = null;
 
-      if(job?.invoiceId){
-        invoice = await Invoice.findById(
-          job.invoiceId,
+    if (job?.invoiceId) {
+      invoice = await Invoice.findOne({
+        _id: job.invoiceId,
+        customerId: customer._id,
+        bookingId: booking._id,
+      })
+        .select(
+          "invoiceNumber status currency items subtotal discountAmount taxPercent taxAmount grandTotal amountPaid balanceDue razorpayPaymentId paymentMethod paymentReceivedAt issuedAt dueDate",
         )
-          .select(
-            "invoiceNumber status currency items subtotal discountAmount taxPercent taxAmount grandTotal amountPaid balanceDue razorpayPaymentId paymentMethod paymentReceivedAt issuedAt dueDate",
-          )
-          .lean();
-      };
+        .lean();
+    }
 
-      /*
+    /*
      * If job has no invoiceId but booking flow has
      * an invoice related to this job, the query above
      * is enough for current architecture.
      */
 
-      const tracking = getCustomerTracking(job,booking);
+    const tracking = getCustomerTracking(job, booking);
 
-      const timeline = buildTimeline(
-        booking,
-        job,invoice
-      );
+    const timeline = buildTimeline(booking, job, invoice);
 
-    return NextResponse.json({
-      success: true,
-
-      booking,
-
-      provider:
-        booking.serviceProviderId,
-
-      service:
-        booking.serviceOfferingId,
-
-      technician:
-        job?.technicianId ||
-        booking.technicianId ||
-        null,
-
-      //job: job || null,
-      job,
-      invoice,
-      tracking,
-      timeline,
-
-      customer: {
-        id: customer._id,
-        name: customer.name,
-        phone: customer.phone,
-        email: customer.email,
-      },
-    });
-  } catch (error: any) {
-    console.error("Customer booking detail error:", error);
-
+    booking.address = serviceAddressForViewer(
+      booking.address,
+      booking.status !== "cancelled" &&
+        Boolean(
+          job &&
+            [
+              "assigned",
+              "enroute",
+              "arrived",
+              "otp_verified",
+              "in_progress",
+              "on_hold",
+            ].includes(job.status),
+        ),
+    );
     return NextResponse.json(
       {
-        error: error.message || "Unable to load booking",
+        success: true,
+
+        booking,
+
+        provider: booking.serviceProviderId,
+
+        service: booking.serviceOfferingId,
+
+        technician: job?.technicianId || booking.technicianId || null,
+
+        job,
+        invoice,
+        tracking,
+        timeline,
+
+        customer: {
+          id: customer._id,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+        },
       },
-      { status: 500 },
+      { headers: privateHeaders },
     );
+  } catch (error) {
+    return apiFailure(error);
   }
 }

@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { NextResponse } from "next/server";
 import { connectToDb } from "@/lib/db";
 import { requireServiceProvider } from "@/lib/service-provider";
@@ -50,9 +50,9 @@ export async function GET() {
       recentInvoices,
       revenueResult,
     ] = await Promise.all([
-      Booking.countDocuments({
+      ServiceRequest.countDocuments({
         serviceProviderId: providerId,
-        status: "pending",
+        status: "open",
       }),
 
       Booking.countDocuments({

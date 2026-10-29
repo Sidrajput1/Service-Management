@@ -6,6 +6,7 @@ export type InvoiceStatus =
   | "issued"
   | "partial"
   | "paid"
+  | "refunded"
   | "cancelled";
 
 export interface IInvoiceItem {
@@ -37,6 +38,7 @@ export interface IInvoice extends Document {
   grandTotal: number;
 
   amountPaid: number;
+  refundedPaise?: number;
   balanceDue: number;
 
   notes?: string;
@@ -85,17 +87,19 @@ const InvoiceSchema = new Schema<IInvoice>(
 
     status: {
       type: String,
-      enum: ["draft", "issued", "partial", "paid", "cancelled"],
+      enum: ["draft", "issued", "partial", "paid", "refunded", "cancelled"],
       default: "draft",
     },
     currency: { type: String, default: "INR" },
     items: { type: [InvoiceItemSchema], default: [] },
     subtotal: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 },
     taxPercent: { type: Number, default: 0 },
     taxAmount: { type: Number, default: 0 },
     grandTotal: { type: Number, default: 0 },
 
     amountPaid: { type: Number, default: 0 },
+    refundedPaise: { type: Number, min: 0, default: 0 },
     balanceDue: { type: Number, default: 0 },
     notes: String,
     issuedAt: Date,
@@ -122,6 +126,7 @@ InvoiceSchema.index(
   },
 );
 
+InvoiceSchema.index({ customerId: 1, _id: -1 });
 export const Invoice: Model<IInvoice> =
   mongoose.models.Invoice || mongoose.model<IInvoice>("Invoice", InvoiceSchema);
 export default Invoice;

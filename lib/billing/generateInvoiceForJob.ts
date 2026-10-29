@@ -3,8 +3,22 @@ import Invoice from "@/models/invoice";
 import { generateInvoiceNumber } from "./generateInvoiceNumber";
 import Job from "@/models/job";
 import mongoose from "mongoose";
+import { prepareInvoiceFinance } from "@/lib/finance-ledger";
 
-function calculateInvoiceTotals(items: any[], taxPercent: number) {
+async function attachInvoiceIfMissing(
+  jobId: mongoose.Types.ObjectId,
+  invoiceId: mongoose.Types.ObjectId,
+) {
+  await Job.updateOne(
+    {
+      _id: jobId,
+      $or: [{ invoiceId: { $exists: false } }, { invoiceId: null }],
+    },
+    { $set: { invoiceId } },
+  );
+}
+
+export function calculateInvoiceTotals(items: any[], taxPercent: number) {
   const subtotal = items.reduce(
     (total, item) => total + Number(item.amount || 0),
     0,
@@ -39,6 +53,8 @@ export async function generateInvoiceForJob(jobId: mongoose.Types.ObjectId) {
   });
 
   if (existing) {
+    await attachInvoiceIfMissing(jobId, existing._id);
+    await prepareInvoiceFinance(existing._id);
     return existing;
   }
 
@@ -124,9 +140,15 @@ export async function generateInvoiceForJob(jobId: mongoose.Types.ObjectId) {
 
     description: booking.serviceType || offering?.name || "Service",
 
-    qty: 1,
+    qty:
+      booking.pricing?.pricingModel === "per_unit"
+        ? Number(booking.pricing.quantity || 1)
+        : 1,
 
-    unitPrice: serviceAmount,
+    unitPrice:
+      booking.pricing?.pricingModel === "per_unit"
+        ? serviceAmount / Number(booking.pricing.quantity || 1)
+        : serviceAmount,
 
     amount: serviceAmount,
   });
@@ -153,10 +175,7 @@ export async function generateInvoiceForJob(jobId: mongoose.Types.ObjectId) {
       itemType: "part",
 
       //description: part.partName,
-      description:
-        String(
-          part.partName || "Part",
-        ),
+      description: String(part.partName || "Part"),
 
       qty,
 
@@ -179,18 +198,11 @@ export async function generateInvoiceForJob(jobId: mongoose.Types.ObjectId) {
    * Final fallback:
    * 18%.
    */
-  const taxPercent =
-    Number(
-      booking.pricing?.taxPercent ??
-        offering?.taxPercent ??
-        18,
-    );
+  const taxPercent = Number(
+    booking.pricing?.taxPercent ?? offering?.taxPercent ?? 18,
+  );
 
-  const totals =
-    calculateInvoiceTotals(
-      items,
-      taxPercent,
-    );
+  const totals = calculateInvoiceTotals(items, taxPercent);
   //const taxPercent = Number(booking.pricing?.taxPercent || 18);
 
   //const totals = calculateInvoiceTotals(items, taxPercent);
@@ -202,11 +214,7 @@ export async function generateInvoiceForJob(jobId: mongoose.Types.ObjectId) {
    *
    * We keep discountAmount for display/reporting.
    */
-  const discountAmount =
-    Number(
-      booking.pricing?.discountAmount ||
-        0,
-    );
+  const discountAmount = Number(booking.pricing?.discountAmount || 0);
 
   //const grandTotal = totals.grandTotal;
 
@@ -215,54 +223,70 @@ export async function generateInvoiceForJob(jobId: mongoose.Types.ObjectId) {
   let invoiceNumberExists = true;
 
   while (invoiceNumberExists) {
-  invoiceNumber =
-    generateInvoiceNumber();
+    invoiceNumber = generateInvoiceNumber();
 
-  invoiceNumberExists =
-    Boolean(
+    invoiceNumberExists = Boolean(
       await Invoice.exists({
         invoiceNumber,
       }),
     );
-}
-  const invoice = await Invoice.create({
-    invoiceNumber,
-    jobId: job._id,
+  }
+  let invoice;
+  try {
+    invoice = await Invoice.create({
+      invoiceNumber,
+      jobId: job._id,
 
-    bookingId: booking._id,
+      bookingId: booking._id,
 
-    customerId: booking.customerId,
+      customerId: booking.customerId,
 
-    createdBy: job.assignedBy,
+      createdBy: job.assignedBy,
 
-    status: "issued",
+      status: "issued",
 
-    currency: "INR",
+      currency: "INR",
 
-    items,
+      items,
 
-    subtotal: totals.subtotal,
+      subtotal: totals.subtotal,
 
-    discountAmount,
+      discountAmount,
 
-    taxPercent,
+      taxPercent,
 
-    taxAmount: totals.taxAmount,
+      taxAmount: totals.taxAmount,
 
-    grandTotal:totals.grandTotal,
+      grandTotal: totals.grandTotal,
 
-    amountPaid: 0,
+      amountPaid: 0,
 
-    balanceDue: totals.grandTotal,
+      balanceDue: totals.grandTotal,
 
-    notes: booking.notes || "",
+      notes: booking.notes || "",
 
-    issuedAt: new Date(),
+      issuedAt: new Date(),
 
-    finalizedAt: new Date(),
+      finalizedAt: new Date(),
 
-    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  });
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+  } catch (error) {
+    if (
+      !(
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === 11000
+      )
+    )
+      throw error;
+    const existingForJob = await Invoice.findOne({ jobId });
+    if (!existingForJob) throw error;
+    await attachInvoiceIfMissing(jobId, existingForJob._id);
+    await prepareInvoiceFinance(existingForJob._id);
+    return existingForJob;
+  }
 
   /*
    * Attach invoice to job.
@@ -272,6 +296,8 @@ export async function generateInvoiceForJob(jobId: mongoose.Types.ObjectId) {
   job.paymentStatus = "pending";
 
   await job.save();
+
+  await prepareInvoiceFinance(invoice._id);
 
   return invoice;
 }

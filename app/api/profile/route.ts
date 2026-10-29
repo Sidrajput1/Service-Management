@@ -1,3 +1,6 @@
+import { saveProviderProfile } from "@/lib/provider-review";
+import { providerProfileSchema } from "@/lib/provider-profile-input";
+import { ApiAuthError } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 import { requireCurrentUser } from "@/lib/auth";
@@ -5,8 +8,7 @@ import { connectToDb } from "@/lib/db";
 
 import User from "@/models/user";
 import Customer from "@/models/customer";
-import { ServiceProvider, Technician,PriceItem } from "@/models";
-
+import { ServiceProvider, Technician, PriceItem } from "@/models";
 
 export async function GET() {
   try {
@@ -72,8 +74,7 @@ export async function GET() {
       },
     );
   }
-};
-
+}
 
 export async function PATCH(request: Request) {
   try {
@@ -90,38 +91,21 @@ export async function PATCH(request: Request) {
      *
      * Email and role are intentionally excluded.
      */
-    const allowedUserFields: Record<
-      string,
-      any
-    > = {};
+    const allowedUserFields: Record<string, any> = {};
 
-    if (
-      typeof body.name === "string" &&
-      body.name.trim()
-    ) {
-      allowedUserFields.name =
-        body.name.trim();
+    if (typeof body.name === "string" && body.name.trim()) {
+      allowedUserFields.name = body.name.trim();
     }
 
-    if (
-      typeof body.phone === "string"
-    ) {
-      allowedUserFields.phone =
-        body.phone.trim() || null;
+    if (typeof body.phone === "string") {
+      allowedUserFields.phone = body.phone.trim() || null;
     }
 
-    if (
-      Object.keys(allowedUserFields)
-        .length
-    ) {
-      await User.findByIdAndUpdate(
-        user._id,
-        allowedUserFields,
-        {
-          new: true,
-          runValidators: true,
-        },
-      );
+    if (Object.keys(allowedUserFields).length) {
+      await User.findByIdAndUpdate(user._id, allowedUserFields, {
+        new: true,
+        runValidators: true,
+      });
     }
 
     /*
@@ -130,38 +114,22 @@ export async function PATCH(request: Request) {
      * -----------------------------------------
      */
     if (user.role === "customer") {
-      const update: Record<
-        string,
-        any
-      > = {};
+      const update: Record<string, any> = {};
 
-      if (
-        typeof body.name === "string" &&
-        body.name.trim()
-      ) {
-        update.name =
-          body.name.trim();
+      if (typeof body.name === "string" && body.name.trim()) {
+        update.name = body.name.trim();
       }
 
-      if (
-        typeof body.phone === "string"
-      ) {
-        update.phone =
-          body.phone.trim();
+      if (typeof body.phone === "string") {
+        update.phone = body.phone.trim();
       }
 
-      if (
-        typeof body.notes === "string"
-      ) {
-        update.notes =
-          body.notes.trim();
+      if (typeof body.notes === "string") {
+        update.notes = body.notes.trim();
       }
 
-      if (
-        Array.isArray(body.addresses)
-      ) {
-        update.addresses =
-          body.addresses;
+      if (Array.isArray(body.addresses)) {
+        update.addresses = body.addresses;
       }
 
       await Customer.findOneAndUpdate(
@@ -182,34 +150,17 @@ export async function PATCH(request: Request) {
      * -----------------------------------------
      */
     if (user.role === "technician") {
-      const technicianUpdate: Record<
-        string,
-        any
-      > = {};
+      const technicianUpdate: Record<string, any> = {};
 
-      if (
-        Array.isArray(body.skills)
-      ) {
-        technicianUpdate.skills =
-          body.skills
-            .filter(
-              (item: any) =>
-                typeof item ===
-                "string",
-            )
-            .map(
-              (item: string) =>
-                item.trim(),
-            )
-            .filter(Boolean);
+      if (Array.isArray(body.skills)) {
+        technicianUpdate.skills = body.skills
+          .filter((item: any) => typeof item === "string")
+          .map((item: string) => item.trim())
+          .filter(Boolean);
       }
 
-      if (
-        typeof body.vehicleType ===
-        "string"
-      ) {
-        technicianUpdate.vehicleType =
-          body.vehicleType.trim();
+      if (typeof body.vehicleType === "string") {
+        technicianUpdate.vehicleType = body.vehicleType.trim();
       }
 
       /*
@@ -240,130 +191,30 @@ export async function PATCH(request: Request) {
      * SERVICE PROVIDER
      * -----------------------------------------
      */
-    if (
-      user.role ===
-      "service_provider"
-    ) {
-      const providerUpdate: Record<
-        string,
-        any
-      > = {};
-
-      if (
-        typeof body.companyName ===
-        "string" &&
-        body.companyName.trim()
-      ) {
-        providerUpdate.companyName =
-          body.companyName.trim();
-      }
-
-      if (
-        typeof body.businessType ===
-        "string"
-      ) {
-        providerUpdate.businessType =
-          body.businessType.trim();
-      }
-
-      if (
-        typeof body.description ===
-        "string"
-      ) {
-        providerUpdate.description =
-          body.description.trim();
-      }
-
-      if (
-        typeof body.phone === "string"
-      ) {
-        providerUpdate.phone =
-          body.phone.trim();
-      }
-
-      /*
-       * Email remains controlled by the
-       * authentication/account layer.
-       *
-       * Do NOT update ownerId.
-       * Do NOT update verificationStatus.
-       * Do NOT update trial dates.
-       * Do NOT update status.
-       */
-      if (body.address) {
-        providerUpdate.address = {
-          addressLine:
-            String(
-              body.address
-                .addressLine ||
-                "",
-            ).trim(),
-
-          city: String(
-            body.address.city ||
-              "",
-          ).trim(),
-
-          state: String(
-            body.address.state ||
-              "",
-          ).trim(),
-
-          pincode: String(
-            body.address.pincode ||
-              "",
-          ).trim(),
-
-          location:
-            body.address.location || {
-              type: "Point",
-              coordinates: [0, 0],
-            },
-        };
-      }
-
-      if (
-        Array.isArray(
-          body.serviceAreas,
-        )
-      ) {
-        providerUpdate.serviceAreas =
-          body.serviceAreas
-            .filter(
-              (item: any) =>
-                typeof item ===
-                "string",
-            )
-            .map(
-              (item: string) =>
-                item.trim(),
-            )
-            .filter(Boolean);
-      }
-
-      await ServiceProvider.findOneAndUpdate(
-        {
-          ownerId: user._id,
-        },
-        providerUpdate,
-        {
-          new: true,
-          runValidators: true,
-        },
-      );
+    if (user.role === "service_provider") {
+      if (body.serviceAreas !== undefined)
+        throw new ApiAuthError(
+          "Manage structured service areas from the Service Areas page.",
+          400,
+        );
+      const provider = await ServiceProvider.findOne({ ownerId: user._id });
+      if (!provider) throw new ApiAuthError("Provider profile not found", 404);
+      const value = providerProfileSchema.partial().parse(body);
+      await saveProviderProfile(provider, {
+        ...value,
+        ...(value.address
+          ? { address: { ...provider.address, ...value.address } }
+          : {}),
+      });
     }
-
     return NextResponse.json({
       success: true,
-      message:
-        "Profile updated successfully",
+      message: "Profile updated successfully",
     });
   } catch (error: any) {
     return NextResponse.json(
       {
-        error:
-          error.message ||
-          "Unable to update profile",
+        error: error.message || "Unable to update profile",
       },
       {
         status: error.status || 500,

@@ -4,6 +4,11 @@ import { useMemo, useState } from "react";
 import { PackagePlus, Plus, Trash2, Calculator } from "lucide-react";
 
 import api from "@/lib/api";
+import { useRefreshTechnicianJob } from "@/hooks/useTechnicianJobs";
+import {
+  createTechnicianActionGate,
+  technicianMutationMessage,
+} from "@/lib/technician-workflow.mjs";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -11,11 +16,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 type JobPart = {
   partName: string;
   qty: number;
-  price: number;
+  price?: number;
 };
 
 type JobPartsUsedProps = {
@@ -23,16 +29,21 @@ type JobPartsUsedProps = {
   partsUsed?: JobPart[];
   jobStatus: string;
   onUpdated?: (parts: JobPart[]) => void;
+  readOnly?: boolean;
+  actionGate?: ReturnType<typeof createTechnicianActionGate>;
+  onBusyChange?: (busy: boolean) => void;
 };
 
-const EDITABLE_STATUSES = ["otp_verified", "in_progress", "on_hold", "arrived"];
+const EDITABLE_STATUSES = ["otp_verified", "in_progress", "on_hold"];
 
-function currency(value: number) {
+function currency(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return "Not recorded";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 2,
-  }).format(value || 0);
+  }).format(value);
 }
 
 export default function JobPartsUsed({
@@ -40,9 +51,13 @@ export default function JobPartsUsed({
   partsUsed = [],
   jobStatus,
   onUpdated,
+  readOnly = false,
+  actionGate,
+  onBusyChange,
 }: JobPartsUsedProps) {
-  console.log("Job id is", jobId);
-  console.log("Job status is", jobStatus);
+  const refresh = useRefreshTechnicianJob(jobId);
+  const [ownGate] = useState(() => createTechnicianActionGate());
+  const gate = actionGate || ownGate;
   const [parts, setParts] = useState<JobPart[]>(partsUsed);
 
   const [showForm, setShowForm] = useState(false);
@@ -57,11 +72,18 @@ export default function JobPartsUsed({
 
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
 
-  const canEdit = EDITABLE_STATUSES.includes(jobStatus);
-
-  console.log("Can edit", canEdit);
+  const canEdit = !readOnly && EDITABLE_STATUSES.includes(jobStatus);
 
   const totalPartsAmount = useMemo(() => {
+    if (
+      parts.some(
+        (part) =>
+          typeof part.price !== "number" ||
+          !Number.isFinite(part.price) ||
+          !Number.isFinite(part.qty),
+      )
+    )
+      return undefined;
     return parts.reduce(
       (total, part) => total + Number(part.qty || 0) * Number(part.price || 0),
       0,
@@ -69,6 +91,7 @@ export default function JobPartsUsed({
   }, [parts]);
 
   async function handleAddPart() {
+    if (!canEdit || gate.isBusy()) return;
     const cleanName = partName.trim();
 
     const parsedQty = Number(qty);
@@ -76,70 +99,93 @@ export default function JobPartsUsed({
     const parsedPrice = Number(price);
 
     if (!cleanName) {
-      alert("Enter part name");
+      toast.error("Enter part name");
       return;
     }
 
     if (!Number.isFinite(parsedQty) || parsedQty <= 0) {
-      alert("Quantity must be greater than zero");
+      toast.error("Quantity must be greater than zero");
       return;
     }
 
-    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      alert("Enter a valid price");
+    if (!price.trim() || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      toast.error("Enter a valid price");
       return;
     }
 
-    try {
-      setSaving(true);
+    await gate.run(async () => {
+      try {
+        setSaving(true);
+        onBusyChange?.(true);
 
-      const { data } = await api.post(`/technician/jobs/${jobId}/parts`, {
-        partName: cleanName,
-        qty: parsedQty,
-        price: parsedPrice,
-      });
+        const { data } = await api.post(`/technician/jobs/${jobId}/parts`, {
+          partName: cleanName,
+          qty: parsedQty,
+          price: parsedPrice,
+        });
 
-      const updatedParts = data?.partsUsed || [];
+        const updatedParts = data?.partsUsed;
+        if (!Array.isArray(updatedParts))
+          throw new Error("Part update was not confirmed");
 
-      setParts(updatedParts);
+        setParts(updatedParts);
 
-      onUpdated?.(updatedParts);
+        onUpdated?.(updatedParts);
+        await refresh();
 
-      setPartName("");
-      setQty("1");
-      setPrice("");
-      setShowForm(false);
-    } catch (error: any) {
-      alert(
-        error?.response?.data?.error || error?.message || "Unable to add part",
-      );
-    } finally {
-      setSaving(false);
-    }
+        setPartName("");
+        setQty("1");
+        setPrice("");
+        setShowForm(false);
+        toast.success("Part saved to this job.");
+      } catch (error) {
+        toast.error(
+          technicianMutationMessage(
+            error,
+            "Unable to add this part. Refresh the job and try again.",
+          ),
+        );
+        await refresh();
+      } finally {
+        setSaving(false);
+        onBusyChange?.(false);
+      }
+    });
   }
 
   async function handleRemovePart(index: number) {
-    try {
-      setDeletingIndex(index);
+    if (!canEdit || gate.isBusy()) return;
+    await gate.run(async () => {
+      try {
+        setDeletingIndex(index);
+        onBusyChange?.(true);
 
-      const { data } = await api.delete(
-        `/technician/jobs/${jobId}/parts/${index}`,
-      );
+        const { data } = await api.delete(
+          `/technician/jobs/${jobId}/parts/${index}`,
+        );
 
-      const updatedParts = data?.partsUsed || [];
+        const updatedParts = data?.partsUsed;
+        if (!Array.isArray(updatedParts))
+          throw new Error("Part update was not confirmed");
 
-      setParts(updatedParts);
+        setParts(updatedParts);
 
-      onUpdated?.(updatedParts);
-    } catch (error: any) {
-      alert(
-        error?.response?.data?.error ||
-          error?.message ||
-          "Unable to remove part",
-      );
-    } finally {
-      setDeletingIndex(null);
-    }
+        onUpdated?.(updatedParts);
+        await refresh();
+        toast.success("Part removed from this job.");
+      } catch (error) {
+        toast.error(
+          technicianMutationMessage(
+            error,
+            "Unable to remove this part. Refresh the job and try again.",
+          ),
+        );
+        await refresh();
+      } finally {
+        setDeletingIndex(null);
+        onBusyChange?.(false);
+      }
+    });
   }
 
   return (
@@ -179,7 +225,12 @@ export default function JobPartsUsed({
         ) : (
           <div className="space-y-3">
             {parts.map((part, index) => {
-              const lineTotal = Number(part.qty || 0) * Number(part.price || 0);
+              const lineTotal =
+                typeof part.price === "number" &&
+                Number.isFinite(part.price) &&
+                Number.isFinite(part.qty)
+                  ? part.qty * part.price
+                  : undefined;
 
               return (
                 <div
@@ -204,7 +255,8 @@ export default function JobPartsUsed({
                           variant="ghost"
                           size="icon"
                           className="rounded-xl text-destructive hover:text-destructive"
-                          disabled={deletingIndex === index}
+                          disabled={saving || deletingIndex !== null}
+                          aria-label={`Remove ${part.partName}`}
                           onClick={() => {
                             const confirmed = window.confirm(
                               `Remove "${part.partName}" from this job`,
@@ -245,6 +297,7 @@ export default function JobPartsUsed({
             variant="outline"
             className="w-full rounded-xl"
             onClick={() => setShowForm(true)}
+            disabled={saving || deletingIndex !== null}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Part

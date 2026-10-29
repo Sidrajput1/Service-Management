@@ -2,10 +2,13 @@
 
 import api from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCustomerScope } from "@/hooks/useCustomerScope";
 
 export function useCustomerMe(){
+    const scope = useCustomerScope();
     return useQuery({
         queryKey:["Customer-me"],
+        enabled: scope.enabled,
         queryFn: async () => {
             const {data} = await api.get("/customer/me");
             return data;
@@ -83,24 +86,29 @@ export function useCustomerJobById(id?:string){
     })
 };
 
-export function useCustomerInvoice(){
+export function useCustomerInvoice(cursor?: string){
+    const scope = useCustomerScope();
     return useQuery({
-        queryKey:["customer-invoices"],
+        queryKey:["customer-invoices", cursor, scope.userId],
+        enabled: scope.enabled,
         queryFn:async () => {
-            const {data} = await api.get("/customer/invoices");
+            const {data} = await api.get(`/customer/invoices?${new URLSearchParams({ limit: "12", ...(cursor ? { cursor } : {}) })}`);
             return data;
         }
     })
 };
 
 export function useCustomerInvoiceById(id?:string){
+    const scope = useCustomerScope();
     return useQuery({
-        queryKey:["customer-invoicebyid",id],
+        queryKey:["customer-invoicebyid",id,scope.userId],
         queryFn:async () => {
             const {data} = await api.get(`/customer/invoices/${id}`);
             return data;
         },
-        enabled:!!id,
+        enabled:scope.enabled && !!id,
+        staleTime: 0,
+        refetchInterval: 10000,
     })
 };
 
@@ -112,7 +120,8 @@ export function useUpdateCustomerProfile(){
             return data;
         },
         onSuccess:() => {
-            qc.invalidateQueries({queryKey:["customer-me"]});
+            qc.invalidateQueries({queryKey:["Customer-me"]});
+            qc.invalidateQueries({queryKey:["profile"]});
             qc.invalidateQueries({queryKey:["customer-dashboard"]});
         },
     });

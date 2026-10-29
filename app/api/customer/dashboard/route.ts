@@ -10,7 +10,7 @@ import { ServiceOffering, ServiceProvider } from "@/models";
 import {PriceItem} from "@/models/PriceItem";
 import { requireCustomer, requireCustomerProfile } from "@/lib/customer";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 
 export const runtime = "nodejs";
 

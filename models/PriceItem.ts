@@ -4,8 +4,23 @@ export type PriceItemType = "service" | "part" | "visit" | "other";
 
 export interface IPriceItem extends Document {
   itemType: PriceItemType;
-  name: String;
-  price: Number;
+  catalogKey?: string;
+  normalizedName?: string;
+  reviewVersion?: number;
+  categoryKey?: string;
+  skillKeys?: string[];
+  suggestedPrice?: {
+    amount: number;
+    currency: string;
+    unit: string;
+    city?: string;
+    sourceUrl?: string;
+    checkedAt?: string;
+    kind: "public_listing" | "configured";
+    qualification?: string;
+  } | null;
+  name: string;
+  price: number;
   unit?: string;
   taxPercent?: number;
   isActive: boolean;
@@ -24,6 +39,21 @@ const PriceItemSchema = new Schema<IPriceItem>(
       index: true,
     },
     name: { type: String, required: true, trim: true, index: true },
+    catalogKey: { type: String, trim: true },
+    normalizedName: { type: String, trim: true },
+    reviewVersion: { type: Number, default: 0 },
+    categoryKey: { type: String, trim: true },
+    skillKeys: { type: [String], default: [] },
+    suggestedPrice: {
+      amount: Number,
+      currency: String,
+      unit: String,
+      city: String,
+      sourceUrl: String,
+      checkedAt: String,
+      kind: { type: String, enum: ["public_listing", "configured"] },
+      qualification: String,
+    },
     price: { type: Number, required: true, default: 0, min: 0 },
     unit: { type: String, default: "" },
     taxPercent: { type: Number, default: 18, min: 0 },
@@ -35,6 +65,22 @@ const PriceItemSchema = new Schema<IPriceItem>(
 );
 
 PriceItemSchema.index({ itemType: 1, name: 1 }, { unique: true });
+PriceItemSchema.index(
+  { catalogKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { catalogKey: { $type: "string" } },
+  },
+);
+
+PriceItemSchema.index(
+  { itemType: 1, normalizedName: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { normalizedName: { $type: "string" } },
+  },
+);
+PriceItemSchema.index({ itemType: 1, isActive: 1, _id: -1 });
 
 export const PriceItem: Model<IPriceItem> =
   mongoose.models.PriceItem ||

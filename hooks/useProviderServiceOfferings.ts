@@ -2,20 +2,26 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
+import { useProviderScope } from "@/hooks/useProviderScope";
+import type { ProviderOffering } from "@/lib/marketplace-types";
 
 export interface ServiceOffering {
   _id: string;
   serviceProviderId: string;
-  priceItemId: string | {
-    _id: string;
-    name: string;
-    itemType: string;
-    price: number;
-    taxPercent?: number;
-  };
+  priceItemId:
+    | string
+    | {
+        _id: string;
+        name: string;
+        itemType: string;
+        price: number;
+        taxPercent?: number;
+      };
 
   name: string;
   price: number;
+  pricingModel?: "fixed" | "starting" | "per_unit" | "quote_required";
+  unit?: string;
   taxPercent: number;
   description?: string;
 
@@ -38,22 +44,21 @@ export interface PriceCalculation {
   finalPrice: number;
 }
 
-export interface ServiceOfferingWithPricing
-  extends ServiceOffering {
+export interface ServiceOfferingWithPricing extends ServiceOffering {
   pricing?: PriceCalculation;
 }
 
 export function useProviderServiceOfferings() {
+  const scope = useProviderScope();
   return useQuery({
-    queryKey: ["provider-service-offerings"],
+    queryKey: ["provider-service-offerings", scope.userId],
+    enabled: scope.enabled,
     queryFn: async () => {
-      const { data } = await api.get(
-        "/service-provider/service-offerings"
-      );
+      const { data } = await api.get("/service-provider/service-offerings");
 
       return data as {
         success: boolean;
-        offerings: ServiceOfferingWithPricing[];
+        offerings: ProviderOffering[];
       };
     },
   });
@@ -68,6 +73,8 @@ export function useCreateProviderServiceOffering() {
       price: number;
       taxPercent: number;
       description?: string;
+      pricingModel?: "fixed" | "starting" | "per_unit" | "quote_required";
+      unit?: string;
 
       offerEnabled: boolean;
       offerName?: string;
@@ -79,7 +86,7 @@ export function useCreateProviderServiceOffering() {
     }) => {
       const { data } = await api.post(
         "/service-provider/service-offerings",
-        payload
+        payload,
       );
 
       return data;
@@ -110,7 +117,7 @@ export function useUpdateProviderServiceOffering() {
     }) => {
       const { data } = await api.patch(
         `/service-provider/service-offerings/${id}`,
-        payload
+        payload,
       );
 
       return data;
@@ -130,7 +137,7 @@ export function useDisableProviderServiceOffering() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { data } = await api.delete(
-        `/service-provider/service-offerings/${id}`
+        `/service-provider/service-offerings/${id}`,
       );
 
       return data;

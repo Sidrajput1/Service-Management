@@ -1,25 +1,14 @@
 import { requireCustomerProfile } from "@/lib/customer";
-import { connectToDb } from "@/lib/db";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { readPage, pageResult } from "@/lib/pagination";
 import Invoice from "@/models/invoice";
-import { NextResponse } from "next/server";
-
 export const runtime = "nodejs";
-
-export async function GET(){
-    try {
-        await connectToDb();
-
-        const {customer} = await requireCustomerProfile();
-
-        const invoices = await Invoice.find({customerId:customer._id})
-                .populate("jobId")
-                .populate("bookingId")
-                .sort({createdAt:-1})
-                .lean();
-
-        return NextResponse.json({invoices});
-    } catch (err:any) {
-        { error: err.message || "Server error" }
-      { status: err.status || 500 }
-    }
+export async function GET(request: Request) {
+  try {
+    const { customer } = await requireCustomerProfile();
+    const { cursor, limit } = readPage(request);
+    const rows = await Invoice.find({ customerId: customer._id, ...(cursor ? { _id: { $lt: cursor } } : {}) }).select("invoiceNumber bookingId jobId status currency grandTotal amountPaid balanceDue issuedAt dueDate createdAt").sort({ _id: -1 }).limit(limit + 1).lean();
+    const page = pageResult(rows, limit);
+    return privateJson({ invoices: page.items, nextCursor: page.nextCursor });
+  } catch (error) { return apiFailure(error); }
 }

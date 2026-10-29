@@ -5,7 +5,7 @@ import ChatBtn from "@/components/chat/ChatBtn";
 import ChatWindow from "@/components/chat/ChatWindow";
 import { useTechnicianJobs } from "@/hooks/useTechnicianJobs";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 
 
 export default function TechChatPage({session}: { session: any }) {

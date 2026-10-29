@@ -6,6 +6,7 @@ import { connectToDb } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { calculateInvoiceTotal, recomputeBalance } from "@/lib/billing";
 import Job from "@/models/job";
+import { assertInvoiceMutable } from "@/lib/finance-ledger";
 const UpdateInvoiceSchema = z.object({
     notes: z.string().optional(),
   discountAmount: z.coerce.number().optional(),
@@ -44,6 +45,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const body = await request.json();
     const parsed = UpdateInvoiceSchema.parse(body);
+    if (parsed.status && !["draft", "issued"].includes(parsed.status)) return NextResponse.json({error:"Use verified payment or the finance review process to change a financial status."},{status:409});
 
     const invoice = await Invoice.findById(id);
     if (!invoice) {
@@ -51,6 +53,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     if (parsed.notes !== undefined) invoice.notes = parsed.notes;
+    await assertInvoiceMutable(invoice);
     if (parsed.status) invoice.status = parsed.status;
     if (parsed.discountAmount !== undefined) invoice.discountAmount = parsed.discountAmount;
     if (parsed.taxPercent !== undefined) invoice.taxPercent = parsed.taxPercent;
@@ -91,6 +94,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
+    await assertInvoiceMutable(invoice);
     if (invoice.status === "paid") {
       return NextResponse.json({ error: "Paid invoice cannot be deleted" }, { status: 400 });
     }

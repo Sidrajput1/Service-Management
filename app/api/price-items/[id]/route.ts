@@ -1,86 +1,56 @@
+import { requireAdmin } from "@/lib/auth";
+import { writeCatalog } from "@/lib/admin-catalog";
 import { requireRole } from "@/lib/auth";
-import { connectToDb } from "@/lib/db";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { objectIdSchema } from "@/lib/pagination";
 import PriceItem from "@/models/PriceItem";
-import { NextResponse } from "next/server";
-
-import {z} from "zod";
-
-const UpdateSchema = z.object({
-    itemType: z.enum(["service", "part", "visit", "other"]).optional(),
-  name: z.string().min(1).optional(),
-  price: z.coerce.number().min(0).optional(),
-  unit: z.string().optional(),
-  taxPercent: z.coerce.number().optional(),
-  description: z.string().optional(),
-  isActive: z.boolean().optional(),
-});
-
-export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }){
-    try {
-        await connectToDb();
-        const {id} = await params;
-        const item = await PriceItem.findById(id).lean();
-
-        if(!item){
-            return NextResponse.json({
-                error:"Price item not found",
-            },{status:404})
-        };
-
-        return NextResponse.json({item});
-        
-    } catch (err:any) {
-        return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
-    }
-};
-
-export async function PUT(request: Request, { params }:  { params: Promise<{ id: string }> }){
-    try {
-        await requireRole(["admin","dispatcher"]);
-        await connectToDb();
-        const {id} = await params;
-        const body = await request.json();
-
-        const parsed = UpdateSchema.parse(body);
-
-        const item = await PriceItem.findByIdAndUpdate(id , parsed , {new:true});
-
-        if(!item){
-            return NextResponse.json({error:"price item not found"},{status:404});
-        };
-
-        return NextResponse.json({item});
-
-
-    } catch (err:any) {
-        if(err.name === "zodError"){``
-            return NextResponse.json({
-                error:err.errors
-            },{status:400});
-        };
-
-        return NextResponse.json({error:err.message || "Server error"},{status:500})
-    };
-};
-
-
-// for delete
-
-export async function DELETE(_: Request, { params }:  { params: Promise<{ id: string }> }){
-    try {
-        await requireRole(["admin","dispatcher"]);
-        await connectToDb();
-
-        const {id} = await params;
-        const item = await PriceItem.findByIdAndDelete(id);
-
-         if(!item){
-            return NextResponse.json({error:"price item not found"},{status:404});
-        };
-
-        return NextResponse.json({success:true});
-
-        } catch (err:any) {
-         return NextResponse.json({error:err.message || "Server error"},{status:500})
-    }
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    await requireRole(["admin", "dispatcher"]);
+    const item = await PriceItem.findById(
+      objectIdSchema.parse((await params).id),
+    ).lean();
+    return item
+      ? privateJson({ item })
+      : privateJson({ error: "Catalog item not found" }, 404);
+  } catch (error) {
+    return apiFailure(error);
+  }
+}
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { user } = await requireAdmin();
+    return privateJson(
+      await writeCatalog(
+        String(user._id),
+        await request.json(),
+        objectIdSchema.parse((await params).id),
+      ),
+    );
+  } catch (error) {
+    return apiFailure(error);
+  }
+}
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { user } = await requireAdmin();
+    return privateJson(
+      await writeCatalog(
+        String(user._id),
+        { ...(await request.json()), isActive: false },
+        objectIdSchema.parse((await params).id),
+      ),
+    );
+  } catch (error) {
+    return apiFailure(error);
+  }
 }

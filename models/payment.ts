@@ -9,6 +9,7 @@ export interface IPayment extends Document {
   jobId?: mongoose.Types.ObjectId;
   customerId?:mongoose.Types.ObjectId;
   amount: number;
+  refundedPaise?: number;
   mode: "cash" | "upi" | "card" | "wallet" | "bank_transfer" | "other";
   gateway?: string; // e.g., razorpay
   gatewayTxnId?: string;
@@ -28,6 +29,7 @@ const PaymentSchema = new Schema<IPayment>(
     customerId: { type: Schema.Types.ObjectId, ref: "Customer" },
 
     amount: { type: Number, required: true },
+    refundedPaise: { type: Number, min: 0, default: 0 },
     mode: {
       type: String,
       enum: ["cash", "upi", "card", "wallet", "bank_transfer","checkout", "other"],
@@ -45,8 +47,10 @@ const PaymentSchema = new Schema<IPayment>(
     note: String,
     metadata: Schema.Types.Mixed,
   },
-  { timestamps: true }
+  { timestamps: true, autoIndex: false }
 );
+
+PaymentSchema.index({ gateway: 1, gatewayTxnId: 1 }, { unique: true, partialFilterExpression: { gatewayTxnId: { $type: "string" }, gateway: { $type: "string" } } });
 
 export const Payment: Model<IPayment> =
   mongoose.models.Payment || mongoose.model<IPayment>("Payment", PaymentSchema);

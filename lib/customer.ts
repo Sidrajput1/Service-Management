@@ -31,14 +31,14 @@ export async function requireCustomerProfile(){
 export async function requireCustomer(userId: string) {
   await connectToDb();
 
-  const user = await User.findById(userId);
+  const user = await User.findOne({ _id: userId, isActive: { $ne: false } }).select("-password");
 
   if (!user) {
-    throw new Error("User not found");
+    throw new ApiAuthError("User not found", 401);
   }
 
   if (user.role !== "customer") {
-    throw new Error("Customer access required");
+    throw new ApiAuthError("Customer access required", 403);
   }
 
   const customer = await Customer.findOne({

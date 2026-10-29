@@ -2,7 +2,7 @@
 
 
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import TechChatPage from "@/components/chat/TechChatPage";
 
 

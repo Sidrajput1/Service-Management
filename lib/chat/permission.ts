@@ -1,19 +1,9 @@
+import { canReadConversation } from "@/lib/access-policy.mjs";
 export function isPrivilegedRole(role?: string) {
   return role === "admin" || role === "dispatcher";
 }
 
-export function canAccessConversation(
-  user: { _id: any; role?: string },
-  conversation: any,
-) {
-  if (isPrivilegedRole(user.role)) return true;
-
-  const userId = String(user._id);
-
-  return Array.isArray(conversation?.participants)
-    ? conversation.participants.some((p: any) => String(p.userId) === userId)
-    : false;
-}
+export const canAccessConversation = canReadConversation;
 
 export function normalizeParticipants(
   participants: Array<{ userId: string; role?: string }> = [],

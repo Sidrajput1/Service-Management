@@ -5,6 +5,8 @@ import { connectToDb } from "@/lib/db";
 import { createRazorpayPaymentLink } from "@/lib/razorpay";
 import Invoice from "@/models/invoice";
 import { NextResponse } from "next/server";
+import { canPayInvoice } from "@/lib/access-policy.mjs";
+import { FinanceLedger } from "@/models/finance";
 
 export async function POST(_: Request, { params }:  { params: Promise<{ id: string }> }) {
   try {
@@ -27,10 +29,10 @@ export async function POST(_: Request, { params }:  { params: Promise<{ id: stri
       );
     }
 
-    if (invoice.status === "paid") {
+    if (!canPayInvoice(invoice) || await FinanceLedger.exists({invoiceId:invoice._id,billState:"disputed"})) {
       return NextResponse.json(
         {
-          error: "Invoice is already paid",
+          error: "This invoice is paid, refunded, closed or under review and cannot start a new payment.",
         },
         { status: 400 },
       );

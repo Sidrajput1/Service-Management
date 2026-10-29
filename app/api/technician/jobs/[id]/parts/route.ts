@@ -1,7 +1,9 @@
+import { requireRole } from "@/lib/auth";
+import { apiFailure } from "@/lib/api-response";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { connectToDb } from "@/lib/db";
 
 import { Technician } from "@/models";
@@ -18,8 +20,8 @@ export async function POST(
   },
 ) {
   try {
-    const session =
-      await getServerSession(authOptions);
+    await requireRole(["technician"]);
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -34,17 +36,15 @@ export async function POST(
 
     await connectToDb();
 
-    const technician =
-      await Technician.findOne({
-        userId: session.user.id,
-        isActive: true,
-      });
+    const technician = await Technician.findOne({
+      userId: session.user.id,
+      isActive: true,
+    });
 
     if (!technician) {
       return NextResponse.json(
         {
-          error:
-            "Technician profile not found",
+          error: "Technician profile not found",
         },
         {
           status: 404,
@@ -54,25 +54,18 @@ export async function POST(
 
     const { id } = await params;
 
-    const body =
-      await request.json();
+    const body = await request.json();
 
-    const partName =
-      String(
-        body.partName || "",
-      ).trim();
+    const partName = String(body.partName || "").trim();
 
-    const qty =
-      Number(body.qty);
+    const qty = Number(body.qty);
 
-    const price =
-      Number(body.price);
+    const price = Number(body.price);
 
     if (!partName) {
       return NextResponse.json(
         {
-          error:
-            "Part name is required",
+          error: "Part name is required",
         },
         {
           status: 400,
@@ -80,14 +73,10 @@ export async function POST(
       );
     }
 
-    if (
-      !Number.isFinite(qty) ||
-      qty <= 0
-    ) {
+    if (!Number.isFinite(qty) || qty <= 0) {
       return NextResponse.json(
         {
-          error:
-            "Quantity must be greater than zero",
+          error: "Quantity must be greater than zero",
         },
         {
           status: 400,
@@ -95,14 +84,10 @@ export async function POST(
       );
     }
 
-    if (
-      !Number.isFinite(price) ||
-      price < 0
-    ) {
+    if (!Number.isFinite(price) || price < 0) {
       return NextResponse.json(
         {
-          error:
-            "Invalid part price",
+          error: "Invalid part price",
         },
         {
           status: 400,
@@ -110,27 +95,20 @@ export async function POST(
       );
     }
 
-    const job =
-      await Job.findOne({
-        _id: id,
+    const job = await Job.findOne({
+      _id: id,
 
-        technicianId:
-          technician._id,
+      technicianId: technician._id,
 
-        status: {
-          $in: [
-            "otp_verified",
-            "in_progress",
-            "on_hold",
-          ],
-        },
-      });
+      status: {
+        $in: ["otp_verified", "in_progress", "on_hold"],
+      },
+    });
 
     if (!job) {
       return NextResponse.json(
         {
-          error:
-            "Parts can only be added while the service is active",
+          error: "Parts can only be added while the service is active",
         },
         {
           status: 400,
@@ -138,12 +116,9 @@ export async function POST(
       );
     }
 
-    const existingParts =
-      Array.isArray(
-        job.partsUsed,
-      )
-        ? [...job.partsUsed]
-        : [];
+    const existingParts = Array.isArray(job.partsUsed)
+      ? [...job.partsUsed]
+      : [];
 
     existingParts.push({
       partName,
@@ -151,32 +126,16 @@ export async function POST(
       price,
     });
 
-    job.partsUsed =
-      existingParts as any;
+    job.partsUsed = existingParts as any;
 
     await job.save();
 
     return NextResponse.json({
       success: true,
 
-      partsUsed:
-        job.partsUsed,
+      partsUsed: job.partsUsed,
     });
-  } catch (error: any) {
-    console.error(
-      "Add job part error:",
-      error,
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Unable to add part",
-      },
-      {
-        status: 500,
-      },
-    );
+  } catch (error) {
+    return apiFailure(error);
   }
 }

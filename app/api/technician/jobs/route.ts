@@ -7,8 +7,6 @@ import { NextResponse } from "next/server";
 import Booking from "@/models/booking";
 import Conversation from "@/models/chat/Conversation";
 
-
-
 export async function GET() {
   try {
     await requireRole(["technician"]);
@@ -24,37 +22,36 @@ export async function GET() {
         populate: {
           path: "customerId",
           model: Customer,
+          select: "name phone",
         },
       })
       .sort({ createdAt: -1 })
       .lean();
-    
+
     const conversations = await Conversation.find({
-      jobId:{$in:jobs.map((j) => j._id)},
+      jobId: { $in: jobs.map((j) => j._id) },
     }).lean();
 
-    const convMap = new Map(
-      conversations.map((c) => [String(c.jobId),c])
-    );
+    const convMap = new Map(conversations.map((c) => [String(c.jobId), c]));
 
     const enrichedJobs = jobs.map((job) => {
       const conv = convMap.get(String(job._id));
 
       return {
         ...job,
-        conversationsId:conv?._id || null,
+        conversationsId: conv?._id || null,
         chatUnreadCount:
           conv?.participants?.find(
-          (p: any) => String(p.userId) === String(user._id)
-        )?.unreadCount || 0,
-      }
-    })
+            (p: any) => String(p.userId) === String(user._id),
+          )?.unreadCount || 0,
+      };
+    });
 
-    return NextResponse.json({ jobs:enrichedJobs });
+    return NextResponse.json({ jobs: enrichedJobs });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Server error" },
-      { status: err.status || 500 }
+      { status: err.status || 500 },
     );
   }
 }

@@ -24,10 +24,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import ChatWindow from "@/components/chat/ChatWindow";
 import TechDashWrapper from "@/components/TechDashWrapper";
+import { CustomerWebsiteShell } from "@/components/customer/CustomerWebsiteShell";
+import { ProviderOperationsShell } from "@/components/provider/ProviderOperationsShell";
 //import Sidebar from "@/components/Sidebar";
 
 const adminSidebar = [
@@ -35,11 +37,19 @@ const adminSidebar = [
   { label: "Leads", icon: "users", link: "/admin/leads" },
   { label: "Bookings", icon: "calendar", link: "/admin/bookings" },
   { label: "Jobs", icon: "clipboard", link: "/admin/jobs" },
-  { label: "Manage Technicians", icon: "wrench", link: "/admin/manage-technicians" },
-   { label: "Monitor Technicians ", icon: "wrench", link: "/admin/manage-technicians/monitor" },
+  {
+    label: "Manage Technicians",
+    icon: "wrench",
+    link: "/admin/manage-technicians",
+  },
+  {
+    label: "Monitor Technicians ",
+    icon: "wrench",
+    link: "/admin/manage-technicians/monitor",
+  },
   { label: "Customers", icon: "users", link: "/admin/customers" },
   { label: "Payments", icon: "card", link: "/admin/billing" },
-  {label:"Price Master",icon:"BadgePercent",link:"/admin/pricemaster"},
+  { label: "Price Master", icon: "BadgePercent", link: "/admin/pricemaster" },
   { label: "AMC Plans", icon: "layers", link: "/admin/amc-plans" },
   { label: "Reports", icon: "chart", link: "/admin/analytics" },
   { label: "Settings", icon: "settings", link: "/admin/settings" },
@@ -63,7 +73,12 @@ const techSidebar = [
 
 const customerSidebar = [
   { label: "Dashboard", icon: "home", active: true, link: "/customer" },
-  {label:"Search Service",icon:"search",active:true,link:"/customer/services"},
+  {
+    label: "Search Service",
+    icon: "search",
+    active: true,
+    link: "/customer/services",
+  },
   { label: "My Bookings", icon: "calendar", link: "/customer/bookings" },
   // { label: "Book Service", icon: "calendar", link: "/customer/book-service" },
   // { label: "Jobs", icon: "clipboard", link: "/customer/jobs" },
@@ -132,6 +147,8 @@ const providerSidebar = [
     link: "/service-provider/finance",
     icon: "BarChart3",
   },
+  { label: "Earnings & Payments", link: "/service-provider/finance/earnings", icon: "card" },
+  { label: "Payout Details", link: "/service-provider/finance/settings", icon: "Settings" },
 
   {
     label: "Notifications",
@@ -144,8 +161,7 @@ const providerSidebar = [
   //   link: "/service-provider/settings",
   //   icon: "Settings",
   // },
-
-]
+];
 
 function getSidebarByRole(role: string | undefined) {
   if (role === "admin") {
@@ -156,6 +172,7 @@ function getSidebarByRole(role: string | undefined) {
       accent: "from-slate-600 via-slate-600 to-teal-500",
     };
   }
+  if (role === "dispatcher") { return { items: [ { label:"Operations",icon:"home",link:"/dispatcher" }, ...["leads","bookings","jobs","billing"].map(item=>({label:item,icon:"clipboard",link:`/dispatcher/${item}`})) ], title:"Dispatch operations", subtitle:"Bookings & jobs",accent:"from-slate-600 to-teal-500" }; }
   if (role === "technician") {
     return {
       items: techSidebar,
@@ -173,13 +190,13 @@ function getSidebarByRole(role: string | undefined) {
     };
   }
   // check if role = service_provider
-  if(role === "service_provider"){
+  if (role === "service_provider") {
     return {
-      items:providerSidebar,
-      title:"Service Provider",
-      subtitle:"Provider Center",
-      accent: "from-pink-500 via-red-400 to-pink-600"
-    }
+      items: providerSidebar,
+      title: "Service Provider",
+      subtitle: "Provider Center",
+      accent: "from-pink-500 via-red-400 to-pink-600",
+    };
   }
   return {
     items: [],
@@ -198,20 +215,21 @@ export default async function DashboardLayout({
   //const role = "admin"; // dynamic later
 
   const session = await getServerSession(authOptions);
-  console.log("Session in dashboard layout:", session);
   if (!session) {
     // not signed in - send to sign in page
     redirect("/signin");
   }
-  const role = (session.user as any)?.role as "admin" | "technician" | "customer" | undefined;
-
-  
+  const role = session.user?.role;
+  if (role === "admin") return children;
+  if (role === "customer")
+    return <CustomerWebsiteShell>{children}</CustomerWebsiteShell>;
+  if (role === "service_provider")
+    return <ProviderOperationsShell>{children}</ProviderOperationsShell>;
 
   const sidebar = getSidebarByRole(role);
 
   return (
-  
-   <div className="h-screen bg-background text-foreground  overflow-hidden"> 
+    <div className="h-screen bg-background text-foreground  overflow-hidden">
       <div className="flex h-screen overflow-hidden">
         {/* Desktop Sidebar */}
         <aside className="hidden lg:block lg:w-72 xl:w-80 lg:shrink-0">
@@ -225,7 +243,7 @@ export default async function DashboardLayout({
         </aside>
 
         {/* Main Area */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden" >
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Topbar
             role={role}
             userName={session.user?.name || "User"}

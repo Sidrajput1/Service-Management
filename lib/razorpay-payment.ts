@@ -1,266 +1,263 @@
+import mongoose from "mongoose";
 import Invoice from "@/models/invoice";
-import { connectToDb } from "./db";
 import Payment from "@/models/payment";
 import Job from "@/models/job";
+import { connectToDb } from "./db";
+import { ApiAuthError } from "./auth";
 import { getJobNotificationRecipients } from "./notification-recipents";
 import { notifyPaymentReceived } from "./notify-events";
-
-// type SourceType = 'web' | 'callback' | 'webhook';
-// export async function finalizeSuccessfulRazorpayPayment(input:{
-//     invoiceId?:string;
-//      orderId?: string;
-//   paymentId?: string;
-//   paymentLinkId?: string;
-//   amountPaise: number;
-//   method?: string;
-//   source: SourceType;
-//   rawPayload?: Record<string, any>;
-// }){
-//     await connectToDb();
-
-//     const invoice =
-//     (input.invoiceId && (await Invoice.findById(input.invoiceId))) ||
-//     (input.orderId && (await Invoice.findOne({ razorpayOrderId: input.orderId }))) ||
-//     (input.paymentLinkId && (await Invoice.findOne({ razorpayPaymentLinkId: input.paymentLinkId })));
-
-//   if (!invoice) {
-//     throw new Error("Invoice not found for Razorpay payment");
-//   }
-
-//   // Idempotency: skip if the same Razorpay payment already exists
-//   if (input.paymentId) {
-//     const existingPayment = await Payment.findOne({ gatewayTxnId: input.paymentId });
-//     if (existingPayment) {
-//       return { invoice, payment: existingPayment, duplicate: true };
-//     }
-//   }
-
-//   const amount = Math.max(0, Math.round((input.amountPaise || 0) / 100 * 100) / 100);
-//   const credit = Math.min(amount, Number(invoice.balanceDue || 0) || amount);
-
-//   const payment = await Payment.create({
-//     invoiceId: invoice._id,
-//     jobId: invoice.jobId,
-//     customerId: invoice.customerId,
-//     amount: credit,
-//     mode: input.method || "upi",
-//     gateway: "razorpay",
-//     gatewayTxnId: input.paymentId || input.orderId || input.paymentLinkId,
-//     status: "success",
-//     paidAt: new Date(),
-//     metadata: {
-//       source: input.source,
-//       rawPayload: input.rawPayload || {},
-//     },
-//   });
-
-//   invoice.amountPaid = Math.round((Number(invoice.amountPaid || 0) + credit) * 100) / 100;
-//   invoice.balanceDue = Math.max(0, Math.round((Number(invoice.grandTotal || 0) - invoice.amountPaid) * 100) / 100);
-//   invoice.status = invoice.balanceDue === 0 ? "paid" : "partial";
-//   invoice.paymentMethod = input.method || invoice.paymentMethod;
-//   invoice.paymentReceivedAt = new Date();
-//   if (input.paymentId) invoice.razorpayPaymentId = input.paymentId;
-//   if (input.orderId) invoice.razorpayOrderId = input.orderId;
-//   if (input.paymentLinkId) invoice.razorpayPaymentLinkId = input.paymentLinkId;
-//   await invoice.save();
-
-//   if (invoice.jobId) {
-//     const job = await Job.findById(invoice.jobId);
-//     if (job) {
-//       job.paymentStatus = invoice.balanceDue === 0 ? "paid" : "partial";
-//       job.paymentMethod = input.method || job.paymentMethod;
-//       job.paymentReceivedAt = new Date();
-//       await job.save();
-//     }
-//   }
-
-//   return { invoice, payment, duplicate: false };
-// }
-
-// new function for finalize successful payment
+import { canPayInvoice } from "./access-policy.mjs";
+import { applyVerifiedInvoicePayment } from "./finance-ledger";
+import { FinanceEvent } from "@/models/finance";
+import { paise } from "./finance-policy.mjs";
+import { financeReady } from "./finance-readiness";
 
 type SourceType = "web" | "callback" | "webhook";
-
 export async function finalizeSuccessfulRazorpayPayment(input: {
   invoiceId?: string;
   orderId?: string;
   paymentId?: string;
   paymentLinkId?: string;
-
   paidAmountPaise: number;
   expectedAmountPaise: number;
-
   method?: string;
-
   source: SourceType;
-
-  rawPayload?: Record<string, any>;
+  rawPayload?: Record<string, unknown>;
 }) {
   await connectToDb();
-
-  const invoice =
-    (input.invoiceId && (await Invoice.findById(input.invoiceId))) ||
-    (input.orderId &&
-      (await Invoice.findOne({
-        razorpayOrderId: input.orderId,
-      }))) ||
-    (input.paymentLinkId &&
-      (await Invoice.findOne({
-        razorpayPaymentLinkId: input.paymentLinkId,
-      })));
-
-  if (!invoice) {
-    throw new Error("Invoice not found for Razorpay payment");
-  }
-
-  if (invoice.status === "paid" || Number(invoice.balanceDue || 0) <= 0) {
-    return {
-      invoice,
-      payment: null,
-      duplicate: true,
-    };
-  }
-
-  if (input.paidAmountPaise !== input.expectedAmountPaise) {
-    throw new Error(
-      `Payment amount mismatch. Expected ${input.expectedAmountPaise} paise but received ${input.paidAmountPaise} paise.`,
-    );
-  }
-
-  if (input.paymentId) {
-    const existingPayment = await Payment.findOne({
-      gatewayTxnId: input.paymentId,
-    });
-
-    if (existingPayment) {
-      return {
-        invoice,
-        payment: existingPayment,
-        duplicate: true,
-      };
-    }
-  }
-
-  const credit = Math.round((input.paidAmountPaise / 100) * 100) / 100;
-
-  const payment = await Payment.create({
-    invoiceId: invoice._id,
-
-    jobId: invoice.jobId,
-
-    customerId: invoice.customerId,
-
-    amount: credit,
-
-    mode: input.method || "unknown",
-
-    gateway: "razorpay",
-
-    gatewayTxnId: input.paymentId || input.orderId || input.paymentLinkId,
-
-    status: "success",
-
-    paidAt: new Date(),
-
-    metadata: {
-      source: input.source,
-
-      rawPayload: input.rawPayload || {},
-    },
-  });
-
-  invoice.amountPaid =
-    Math.round((Number(invoice.amountPaid || 0) + credit) * 100) / 100;
-
-  invoice.balanceDue = Math.max(
-    0,
-
-    Math.round((Number(invoice.grandTotal || 0) - invoice.amountPaid) * 100) /
-      100,
-  );
-
-  invoice.status = invoice.balanceDue === 0 ? "paid" : "partial";
-
-  invoice.paymentMethod = input.method || invoice.paymentMethod;
-
-  invoice.paymentReceivedAt = new Date();
-
-  if (input.paymentId) {
-    invoice.razorpayPaymentId = input.paymentId;
-  }
-
-  if (input.orderId) {
-    invoice.razorpayOrderId = input.orderId;
-  }
-
-  await invoice.save();
-
-  if (invoice.jobId) {
-    const job = await Job.findById(invoice.jobId);
-
-    if (job) {
-      job.paymentStatus = invoice.balanceDue === 0 ? "paid" : "partial";
-
-      job.paymentMethod = input.method || job.paymentMethod;
-
-      job.paymentReceivedAt = new Date();
-
-      await job.save();
-    }
-  };
-
-  // adding notification after payment finalized
-
-  const recipients =
-  invoice.jobId
-    ? await getJobNotificationRecipients(
-        invoice.jobId.toString(),
+  const accountingReady = await financeReady();
+  const session = await mongoose.startSession();
+  try {
+    // Both checkout callbacks and webhooks use this transaction. Concurrent delivery
+    // retries against the invoice write, then observes the committed payment.
+    const result = await session.withTransaction(async () => {
+      const invoice =
+        (input.invoiceId &&
+          (await Invoice.findById(input.invoiceId).session(session))) ||
+        (input.orderId &&
+          (await Invoice.findOne({ razorpayOrderId: input.orderId }).session(
+            session,
+          ))) ||
+        (input.paymentLinkId &&
+          (await Invoice.findOne({
+            razorpayPaymentLinkId: input.paymentLinkId,
+          }).session(session)));
+      if (!invoice) throw new ApiAuthError("Invoice not found", 404);
+      if (!input.paymentId)
+        throw new ApiAuthError(
+          "A verified gateway payment reference is required",
+          400,
+        );
+      if (
+        input.orderId &&
+        invoice.razorpayOrderId &&
+        input.orderId !== invoice.razorpayOrderId &&
+        !input.paymentLinkId
       )
-    : {
-        customerUserId: null,
-        providerUserId: null,
-        technicianUserId: null,
-      };
-
-await notifyPaymentReceived({
-  customerUserId:
-    recipients.customerUserId ||
-    undefined,
-
-  providerUserId:
-    recipients.providerUserId ||
-    undefined,
-
-  technicianUserId:
-    recipients.technicianUserId ||
-    undefined,
-
-  invoiceId:
-    invoice._id.toString(),
-
-  invoiceNumber:
-    invoice.invoiceNumber,
-
-  paymentId:
-    payment._id.toString(),
-
-  amount:
-    credit,
-
-  jobId:
-    invoice.jobId
-      ? invoice.jobId.toString()
-      : undefined,
-
-  bookingId:
-    invoice.bookingId
-      ? invoice.bookingId.toString()
-      : undefined,
-});
-
-  return {
-    invoice,
-    payment,
-    duplicate: false,
-  };
+        throw new ApiAuthError("Payment order does not match the invoice", 409);
+      if (
+        input.paymentLinkId &&
+        invoice.razorpayPaymentLinkId &&
+        input.paymentLinkId !== invoice.razorpayPaymentLinkId
+      )
+        throw new ApiAuthError("Payment link does not match the invoice", 409);
+      if (input.paymentId) {
+        const existing = await Payment.findOne({
+          gateway: "razorpay",
+          gatewayTxnId: input.paymentId,
+        }).session(session);
+        if (existing) {
+          if (String(existing.invoiceId) !== String(invoice._id))
+            throw new ApiAuthError(
+              "Payment belongs to a different invoice",
+              409,
+            );
+          return { invoice, payment: existing, duplicate: true };
+        }
+      }
+      if (
+        await FinanceEvent.exists({
+          externalKey: `razorpay-payment:${input.paymentId}`,
+        }).session(session)
+      )
+        throw new ApiAuthError(
+          "Payment is already used for a commission collection",
+          409,
+        );
+      const unallocated = !canPayInvoice(invoice);
+      const balancePaise = unallocated
+        ? paise(invoice.grandTotal)
+        : paise(invoice.balanceDue);
+      if (
+        !Number.isSafeInteger(input.paidAmountPaise) ||
+        input.paidAmountPaise <= 0 ||
+        input.paidAmountPaise !== input.expectedAmountPaise ||
+        input.paidAmountPaise !== balancePaise
+      )
+        throw new ApiAuthError(
+          "Payment amount does not match the current invoice balance",
+          409,
+        );
+      const credit = input.paidAmountPaise / 100;
+      const method =
+        input.method === "netbanking"
+          ? "bank_transfer"
+          : [
+                "cash",
+                "upi",
+                "card",
+                "wallet",
+                "bank_transfer",
+                "checkout",
+              ].includes(input.method || "")
+            ? input.method!
+            : "other";
+      const [payment] = await Payment.create(
+        [
+          {
+            invoiceId: invoice._id,
+            jobId: invoice.jobId,
+            customerId: invoice.customerId,
+            amount: credit,
+            mode: method,
+            gateway: "razorpay",
+            gatewayTxnId: input.paymentId,
+            status: "success",
+            paidAt: new Date(),
+            metadata: {
+              source: input.source,
+              serverVerified: true,
+              unallocated,
+            },
+          },
+        ],
+        { session },
+      );
+      if (unallocated) {
+        if (!accountingReady)
+          throw new ApiAuthError(
+            "An unexpected payment needs finance setup and review. Retry this verified delivery after setup.",
+            503,
+          );
+        const row = await applyVerifiedInvoicePayment(
+          invoice,
+          input.paidAmountPaise,
+          session,
+        );
+        if (!row)
+          throw new ApiAuthError(
+            "The unexpected payment needs a valid booking reference before review.",
+            409,
+          );
+        row.billState = "disputed";
+        row.disputeReason =
+          "An additional or unexpected customer payment was received. Review it before any payout.";
+        await row.save({ session });
+        await FinanceEvent.create(
+          [
+            {
+              dedupeKey: `unexpected-payment:${input.paymentId}`,
+              externalKey: `razorpay-payment:${input.paymentId}`,
+              kind: "unexpected_customer_payment",
+              actorRole: "gateway",
+              providerId: row.providerId,
+              ledgerId: row._id,
+              invoiceId: invoice._id,
+              amountPaise: input.paidAmountPaise,
+              details: {
+                gatewayPaymentId: input.paymentId,
+                requiresReview: true,
+              },
+            },
+          ],
+          { session },
+        );
+        return { invoice, payment, duplicate: false, unallocated: true };
+      }
+      invoice.amountPaid =
+        Math.round((Number(invoice.amountPaid || 0) + credit) * 100) / 100;
+      invoice.balanceDue = Math.max(
+        0,
+        Math.round((Number(invoice.grandTotal) - invoice.amountPaid) * 100) /
+          100,
+      );
+      invoice.status = invoice.balanceDue === 0 ? "paid" : "partial";
+      invoice.paymentMethod = input.method || invoice.paymentMethod;
+      invoice.paymentReceivedAt = new Date();
+      if (input.paymentId) invoice.razorpayPaymentId = input.paymentId;
+      if (input.orderId) invoice.razorpayOrderId = input.orderId;
+      if (input.paymentLinkId)
+        invoice.razorpayPaymentLinkId = input.paymentLinkId;
+      await invoice.save({ session });
+      if (accountingReady) {
+        const row = await applyVerifiedInvoicePayment(
+          invoice,
+          input.paidAmountPaise,
+          session,
+        );
+        await FinanceEvent.create(
+          [
+            {
+              dedupeKey: `customer-payment:${input.paymentId}`,
+              externalKey: `razorpay-payment:${input.paymentId}`,
+              kind: "customer_online_payment",
+              actorRole: "gateway",
+              providerId: row?.providerId,
+              ledgerId: row?._id,
+              invoiceId: invoice._id,
+              amountPaise: input.paidAmountPaise,
+              details: {
+                gatewayPaymentId: input.paymentId,
+                paymentRecordId: String(payment._id),
+                source: input.source,
+              },
+            },
+          ],
+          { session },
+        );
+      }
+      if (invoice.jobId)
+        await Job.updateOne(
+          { _id: invoice.jobId },
+          {
+            $set: {
+              paymentStatus: invoice.balanceDue === 0 ? "paid" : "partial",
+              paymentMethod: input.method || "other",
+              paymentReceivedAt: invoice.paymentReceivedAt,
+            },
+          },
+          { session },
+        );
+      return { invoice, payment, duplicate: false };
+    });
+    if (!result) throw new Error("Payment transaction did not complete");
+    if (!result.duplicate && result.payment) {
+      try {
+        const { invoice, payment } = result;
+        const recipients = invoice.jobId
+          ? await getJobNotificationRecipients(String(invoice.jobId))
+          : {
+              customerUserId: null,
+              providerUserId: null,
+              technicianUserId: null,
+            };
+        await notifyPaymentReceived({
+          customerUserId: recipients.customerUserId || undefined,
+          providerUserId: recipients.providerUserId || undefined,
+          technicianUserId: recipients.technicianUserId || undefined,
+          invoiceId: String(invoice._id),
+          invoiceNumber: invoice.invoiceNumber,
+          paymentId: String(payment._id),
+          amount: payment.amount,
+          jobId: invoice.jobId ? String(invoice.jobId) : undefined,
+          bookingId: invoice.bookingId ? String(invoice.bookingId) : undefined,
+        });
+      } catch {
+        console.error("Payment saved; payment notification delivery failed.");
+      }
+    }
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }

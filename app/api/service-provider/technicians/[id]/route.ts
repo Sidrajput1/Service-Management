@@ -1,383 +1,93 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { connectToDb } from "@/lib/db";
-import { requireServiceProvider } from "@/lib/service-provider";
-
-
-import User from "@/models/user";
-import { Technician } from "@/models";
-
+import { z } from "zod";
+import mongoose from "mongoose";
+import { ApiAuthError } from "@/lib/auth";
+import { requireProvider } from "@/lib/service-provider";
+import { assertProNotWorking } from "@/lib/provider-technicians";
+import { validateSkills, text } from "@/lib/marketplace-validation";
+import { objectIdSchema } from "@/lib/pagination";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import Technician from "@/models/technician";
+import "@/models/user";
 export const runtime = "nodejs";
-
 export async function GET(
   _request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{ id: string }>;
-  },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session =
-      await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 },
-      );
-    }
-
-    await connectToDb();
-
-    const { provider } =
-      await requireServiceProvider(
-        session.user.id,
-      );
-
-    const { id } = await params;
-
-    const technician =
-      await Technician.findOne({
-        _id: id,
-        serviceProviderId:
-          provider._id,
-      })
-        .populate(
-          "userId",
-          "name email phone",
-        )
-        .lean();
-
-    if (!technician) {
-      return NextResponse.json(
-        {
-          error:
-            "Technician not found",
-        },
-        { status: 404 },
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      technician,
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Unable to load technician",
-      },
-      { status: 500 },
-    );
+    const { provider } = await requireProvider();
+    const id = objectIdSchema.parse((await params).id);
+    const technician = await Technician.findOne({
+      _id: id,
+      serviceProviderId: provider._id,
+    })
+      .select("userId skills skillKeys vehicleType status isActive")
+      .populate("userId", "name email phone")
+      .lean();
+    return technician
+      ? privateJson({ technician })
+      : privateJson({ error: "Pro not found" }, 404);
+  } catch (error) {
+    return apiFailure(error);
   }
 }
-
+const updateSchema = z.object({
+  skillKeys: z.array(z.string().max(100)).max(30).optional(),
+  vehicleType: text(80).optional(),
+  isActive: z.boolean().optional(),
+  status: z.enum(["offline", "available", "on_leave"]).optional(),
+});
 export async function PATCH(
   request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{ id: string }>;
-  },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session =
-      await getServerSession(
-        authOptions,
-      );
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized",
-        },
-        {
-          status: 401,
-        },
-      );
-    }
-
-    await connectToDb();
-
-    const { provider } =
-      await requireServiceProvider(
-        session.user.id,
-      );
-
-    const { id } = await params;
-
-    const body = await request.json();
-
-    const technician =
-      await Technician.findOne({
-        _id: id,
-        serviceProviderId:
-          provider._id,
-      });
-
-    if (!technician) {
-      return NextResponse.json(
-        {
-          error:
-            "Technician not found",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
-    if (
-      Array.isArray(
-        body.skills,
-      )
-    ) {
-      technician.skills =
-        body.skills
-          .map((skill: unknown) =>
-            String(skill).trim(),
-          )
-          .filter(Boolean);
-    }
-
-    if (
-      body.vehicleType !==
-      undefined
-    ) {
-      technician.vehicleType =
-        body.vehicleType;
-    }
-
-    if (
-      body.isActive !==
-      undefined
-    ) {
-      technician.isActive =
-        Boolean(
-          body.isActive,
-        );
-    }
-
-    /*
-     * Don't allow provider to manually
-     * change a busy technician to available
-     * while they still have an active job.
-     */
-    if (
-      body.status !==
-        undefined &&
-      body.status !==
-        technician.status
-    ) {
-      if (
-        technician.status ===
-          "busy" &&
-        body.status !==
-          "busy"
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Busy technician cannot change status until the active job is completed",
-          },
-          {
-            status: 409,
-          },
-        );
-      }
-
-      const allowed = [
-        "offline",
-        "available",
-        "busy",
-        "on_leave",
-      ];
-
-      if (
-        allowed.includes(
-          body.status,
+    const { provider } = await requireProvider();
+    const id = objectIdSchema.parse((await params).id);
+    const body = updateSchema.parse(await request.json());
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const technician = await Technician.findOne({
+          _id: id,
+          serviceProviderId: provider._id,
+        }).session(session);
+        if (!technician) throw new ApiAuthError("Pro not found", 404);
+        if (
+          body.isActive === false ||
+          (body.status && body.status !== technician.status)
         )
-      ) {
-        technician.status =
-          body.status;
-      }
+          await assertProNotWorking(technician._id, session);
+        if (body.skillKeys)
+          technician.set(
+            validateSkills(body.skillKeys, technician.skillKeys || []),
+          );
+        if (body.vehicleType !== undefined)
+          technician.vehicleType = body.vehicleType;
+        if (body.status) technician.status = body.status;
+        if (body.isActive !== undefined) {
+          technician.isActive = body.isActive;
+          if (!body.isActive) technician.status = "offline";
+        }
+        await technician.save({ session });
+      });
+    } finally {
+      await session.endSession();
     }
-
-    await technician.save();
-
-    /*
-     * Update the linked User's basic identity info
-     * if provider sent them.
-     */
-    if (
-      body.name !==
-        undefined ||
-      body.phone !==
-        undefined ||
-      body.email !==
-        undefined
-    ) {
-      const user =
-        await User.findById(
-          technician.userId,
-        );
-
-      if (user) {
-        if (
-          body.name !==
-          undefined
-        ) {
-          user.name =
-            String(
-              body.name,
-            ).trim();
-        }
-
-        if (
-          body.phone !==
-          undefined
-        ) {
-          user.phone =
-            String(
-              body.phone,
-            ).trim();
-        }
-
-        if (
-          body.email !==
-          undefined
-        ) {
-          user.email =
-            String(
-              body.email,
-            )
-              .trim()
-              .toLowerCase();
-        }
-
-        await user.save();
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      technician,
-    });
-  } catch (error: any) {
-    console.error(
-      "Update technician:",
-      error,
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Unable to update technician",
-      },
-      {
-        status: 500,
-      },
-    );
+    return privateJson({ success: true });
+  } catch (error) {
+    return apiFailure(error);
   }
 }
-
 export async function DELETE(
-  _request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{ id: string }>;
-  },
+  request: Request,
+  context: { params: Promise<{ id: string }> },
 ) {
-  try {
-    const session =
-      await getServerSession(
-        authOptions,
-      );
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized",
-        },
-        {
-          status: 401,
-        },
-      );
-    }
-
-    await connectToDb();
-
-    const { provider } =
-      await requireServiceProvider(
-        session.user.id,
-      );
-
-    const { id } = await params;
-
-    const technician =
-      await Technician.findOne({
-        _id: id,
-        serviceProviderId:
-          provider._id,
-      });
-
-    if (!technician) {
-      return NextResponse.json(
-        {
-          error:
-            "Technician not found",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
-    if (
-      technician.status ===
-      "busy"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Busy technician cannot be deactivated while handling an active job",
-        },
-        {
-          status: 409,
-        },
-      );
-    }
-
-    technician.isActive =
-      false;
-
-    technician.status =
-      "offline";
-
-    await technician.save();
-
-    return NextResponse.json({
-      success: true,
-      message:
-        "Technician deactivated",
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Unable to deactivate technician",
-      },
-      {
-        status: 500,
-      },
-    );
-  }
+  return PATCH(
+    new Request(request.url, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isActive: false }),
+    }),
+    context,
+  );
 }

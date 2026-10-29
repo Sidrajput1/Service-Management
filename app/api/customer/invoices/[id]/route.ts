@@ -10,8 +10,11 @@ import "@/models/customer";
 import "@/models/ServiceProvider";
 import "@/models/ServiceOffering";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 import Job from "@/models/job";
+import { canPayInvoice } from "@/lib/access-policy.mjs";
+import { objectIdSchema } from "@/lib/pagination";
+import { apiFailure, privateHeaders } from "@/lib/api-response";
 
 export const runtime = "nodejs";
 
@@ -73,7 +76,7 @@ export async function GET(
         session.user.id,
       );
 
-    const { id } = await params;
+    const id = objectIdSchema.parse((await params).id);
 
     const invoice =
       await Invoice.findOne({
@@ -81,6 +84,7 @@ export async function GET(
         customerId:
           customer._id,
       })
+        .select("invoiceNumber jobId bookingId status currency items.description items.qty items.unitPrice items.amount subtotal discountAmount taxPercent taxAmount grandTotal amountPaid balanceDue notes issuedAt dueDate paymentMethod paymentReceivedAt createdAt")
         .populate(
           "bookingId",
           "serviceType scheduledAt address pricing status serviceProviderId serviceOfferingId",
@@ -101,7 +105,7 @@ export async function GET(
     const job =
       await Job.findOne({
         _id: invoice.jobId,
-        customerId: undefined,
+        bookingId: invoice.bookingId,
       })
         .select(
           "_id status paymentStatus technicianId",
@@ -122,26 +126,7 @@ export async function GET(
         email: customer.email,
       },
 
-      canPay:
-        invoice.status !== "paid" &&
-        invoice.status !== "cancelled" &&
-        Number(invoice.balanceDue || 0) > 0,
-    });
-  } catch (error: any) {
-    console.error(
-      "Customer invoice error:",
-      error,
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Unable to load invoice",
-      },
-      {
-        status: 500,
-      },
-    );
-  }
-} 
+      canPay: canPayInvoice(invoice),
+    }, { headers: privateHeaders });
+  } catch (error) { return apiFailure(error); }
+}

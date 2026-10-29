@@ -15,6 +15,7 @@ export interface IMessageReadBy {
 }
 
 export interface IMessage {
+  clientMessageId?: string;
   conversationId: mongoose.Types.ObjectId;
   senderId: mongoose.Types.ObjectId;
   senderRole: "admin" | "dispatcher" | "technician" | "customer";
@@ -51,6 +52,7 @@ const MessageReadBySchema = new Schema<IMessageReadBy>(
 
 const MessageSchema = new Schema<IMessage>(
   {
+    clientMessageId: { type: String, maxlength: 36 },
     conversationId: {
       type: Schema.Types.ObjectId,
       ref: "Conversation",
@@ -78,6 +80,9 @@ const MessageSchema = new Schema<IMessage>(
 );
 
 MessageSchema.index({ conversationId: 1, createdAt: 1 });
+MessageSchema.index({ conversationId: 1, _id: -1 });
+// Sender-scoped retry keys prevent duplicate persisted messages after a lost response.
+MessageSchema.index({ conversationId: 1, senderId: 1, clientMessageId: 1 }, { unique: true, partialFilterExpression: { clientMessageId: { $type: "string" } } });
 
 export const Message: Model<IMessage> =
   mongoose.models.Message || mongoose.model<IMessage>("Message", MessageSchema);

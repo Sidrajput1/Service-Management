@@ -9,7 +9,7 @@ import Payment from "@/models/payment";
 import Technician from "@/models/technician";
 import { NextResponse } from "next/server";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 function getDateRange(range: string) {
   const now = new Date();
@@ -69,30 +69,30 @@ function amountGroupStage(field: string) {
   ];
 }
 
-export async function GET(request:Request){
-    try {
-        await requireRole(["admin","dispatcher"]);
-        await connectToDb();
+export async function GET(request: Request) {
+  try {
+    await requireRole(["admin"]);
+    await connectToDb();
 
-        const url = new URL(request.url);
+    const url = new URL(request.url);
 
-        const range = url.searchParams.get("range") || "30d";
-        const {start,end} = getDateRange(range);
+    const range = url.searchParams.get("range") || "30d";
+    const { start, end } = getDateRange(range);
 
-        const leadDateFilter = {createdAt :  {$gte:start,$lte:end}};
-        const jobDateFilter = {createdAt:{$gte:start , $lte:end}};
+    const leadDateFilter = { createdAt: { $gte: start, $lte: end } };
+    const jobDateFilter = { createdAt: { $gte: start, $lte: end } };
 
-        const paymentDateFilter = {
-            $or :[
-                {paidAt:{$gte:start , $lte:end}},
-                {createdAt:{$gte:start,$lte:end}}
-            ],
-        };
+    const paymentDateFilter = {
+      $or: [
+        { paidAt: { $gte: start, $lte: end } },
+        { createdAt: { $gte: start, $lte: end } },
+      ],
+    };
 
-        const [
-            totalLeads,
-            totalBookings,
-            totalJobs,
+    const [
+      totalLeads,
+      totalBookings,
+      totalJobs,
       totalCustomers,
       totalTechnicians,
       totalInvoices,
@@ -121,8 +121,8 @@ export async function GET(request:Request){
       recentJobs,
       recentInvoices,
       recentPayments,
-        ] = await Promise.all([
-Lead.countDocuments(leadDateFilter),
+    ] = await Promise.all([
+      Lead.countDocuments(leadDateFilter),
       Booking.countDocuments({ createdAt: { $gte: start, $lte: end } }),
       Job.countDocuments(jobDateFilter),
       Customer.countDocuments({ createdAt: { $gte: start, $lte: end } }),
@@ -147,7 +147,16 @@ Lead.countDocuments(leadDateFilter),
         createdAt: { $gte: start, $lte: end },
       }),
       Job.countDocuments({
-        status: { $in: ["assigned", "accepted", "arrived", "otp_verified", "in_progress", "on_hold"] },
+        status: {
+          $in: [
+            "assigned",
+            "accepted",
+            "arrived",
+            "otp_verified",
+            "in_progress",
+            "on_hold",
+          ],
+        },
         createdAt: { $gte: start, $lte: end },
       }),
 
@@ -294,7 +303,7 @@ Lead.countDocuments(leadDateFilter),
       ]),
 
       Technician.find()
-        .populate("userId")
+        .populate("userId", "name email phone isActive")
         .sort({ jobsCompleted: -1 })
         .limit(5)
         .lean(),
@@ -315,23 +324,29 @@ Lead.countDocuments(leadDateFilter),
         .sort({ createdAt: -1 })
         .limit(8)
         .lean(),
-        ]);
+    ]);
 
-         const totalRevenue = revenueAgg?.[0]?.value || 0;
+    const totalRevenue = revenueAgg?.[0]?.value || 0;
     const totalDue = totalDueAgg?.[0]?.value || 0;
     const paidInvoices = paidInvoicesCount || 0;
     const avgTicket = paidInvoices > 0 ? totalRevenue / paidInvoices : 0;
 
-    const leadTrendMap = new Map(leadTrendAgg.map((x: any) => [x._id, x.value]));
-    const revenueTrendMap = new Map(revenueTrendAgg.map((x: any) => [x._id, x.value]));
-    const completedTrendMap = new Map(completedJobTrendAgg.map((x: any) => [x._id, x.value]));
+    const leadTrendMap = new Map(
+      leadTrendAgg.map((x: any) => [x._id, x.value]),
+    );
+    const revenueTrendMap = new Map(
+      revenueTrendAgg.map((x: any) => [x._id, x.value]),
+    );
+    const completedTrendMap = new Map(
+      completedJobTrendAgg.map((x: any) => [x._id, x.value]),
+    );
 
     const allDates = Array.from(
       new Set([
         ...leadTrendAgg.map((x: any) => x._id),
         ...revenueTrendAgg.map((x: any) => x._id),
         ...completedJobTrendAgg.map((x: any) => x._id),
-      ])
+      ]),
     ).sort();
 
     const trendData = allDates.map((date) => ({
@@ -410,11 +425,10 @@ Lead.countDocuments(leadDateFilter),
       recentInvoices,
       recentPayments,
     });
-    } catch (err:any) {
-        return NextResponse.json(
-            {error:err.message || "Server error"},
-            {status:err.status || 500}
-        )
-    }
-
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: err.status || 500 },
+    );
+  }
 }

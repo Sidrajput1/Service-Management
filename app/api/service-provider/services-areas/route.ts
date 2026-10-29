@@ -1,100 +1,50 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { requireServiceProvider } from "@/lib/service-provider";
-import { connectToDb } from "@/lib/db";
-
+import { requireProvider } from "@/lib/service-provider";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { areasSchema } from "@/lib/marketplace-validation";
+import { legacyCoverage } from "@/lib/marketplace-policy.mjs";
+import { saveProviderProfile } from "@/lib/provider-review";
 export const runtime = "nodejs";
-
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    await connectToDb();
-
-    const { provider } =
-      await requireServiceProvider(session.user.id);
-
-    return NextResponse.json({
+    const { provider } = await requireProvider();
+    return privateJson({
       success: true,
-      serviceAreas: provider.serviceAreas || [],
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          "Unable to load service areas",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(request: Request) {
-  try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    await connectToDb();
-
-    const { provider } =
-      await requireServiceProvider(session.user.id);
-
-    const body = await request.json();
-
-    const areas = Array.isArray(body.serviceAreas)
-      ? body.serviceAreas
-          .map((value: unknown) =>
-            String(value).trim()
-          )
-          .filter(Boolean)
-      : [];
-
-    if (!areas.length) {
-      return NextResponse.json(
-        {
-          error:
-            "Add at least one service area",
-        },
-        { status: 400 }
-      );
-    }
-
-    provider.serviceAreas = Array.from(
-      new Set(areas)
-    );
-
-    await provider.save();
-
-    return NextResponse.json({
-      success: true,
+      areas: legacyCoverage(provider),
+      legacy: provider.coverageVersion !== 1,
       serviceAreas: provider.serviceAreas,
     });
-  } catch (error: any) {
-    console.error("Service area update:", error);
-
-    return NextResponse.json(
+  } catch (error) {
+    return apiFailure(error);
+  }
+}
+export async function PUT(request: Request) {
+  try {
+    const { provider } = await requireProvider();
+    const body = await request.json();
+    const areas = areasSchema.parse(body.areas);
+    // The canonical collection replaces future coverage, never booking address snapshots.
+    provider.coverageAreas = areas;
+    provider.coverageVersion = 1;
+    provider.serviceAreas = areas
+      .filter((area) => area.isActive)
+      .map((area) =>
+        [area.city, area.locality, area.pincode].filter(Boolean).join(" · "),
+      );
+    await saveProviderProfile(
+      provider,
       {
-        error:
-          error.message ||
-          "Unable to save service areas",
+        coverageAreas: provider.coverageAreas,
+        coverageVersion: 1,
+        serviceAreas: provider.serviceAreas,
       },
-      { status: 500 }
+      false,
     );
+    return privateJson({
+      success: true,
+      areas: provider.coverageAreas,
+      serviceAreas: provider.serviceAreas,
+    });
+  } catch (error) {
+    return apiFailure(error);
   }
 }

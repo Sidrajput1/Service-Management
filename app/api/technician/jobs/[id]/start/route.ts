@@ -1,19 +1,14 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
-
-import { requireRole } from "@/lib/auth";
+import { requireRole, ApiAuthError } from "@/lib/auth";
 import { requireTechnicianProfile } from "@/lib/technician";
 import { connectToDb } from "@/lib/db";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { withAssignedJob } from "@/lib/assigned-job-transaction";
 import Job from "@/models/job";
-import Booking from "@/models/booking";
-import { notifyCustomerOtpVerified, notifyJobStatus } from "@/lib/notify-events";
-import "@/models/customer";
+import { notifyCustomerOtpVerified } from "@/lib/notify-events";
 import { getJobNotificationRecipients } from "@/lib/notification-recipents";
 
-const StartSchema = z.object({
-  otp: z.string().min(4, "OTP is required"),
-});
-
+const StartSchema = z.object({ otp: z.string().min(4, "OTP is required") });
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -23,82 +18,48 @@ export async function POST(
     await requireRole(["technician"]);
     const { tech } = await requireTechnicianProfile();
     await connectToDb();
-
-    const body = await request.json();
-    const parsed = StartSchema.parse(body);
-
-    const job = await Job.findById(id);
-    if (!job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
-
-    if (String(job.technicianId) !== String(tech._id)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    if (job.status !== "arrived") {
-      return NextResponse.json(
-        { error: "You must reach the customer first" },
-        { status: 400 },
-      );
-    }
-
-    if (!job.otp || job.otp !== parsed.otp) {
-      return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
-    }
-
-    // if (job.otpExpiresAt && job.otpExpiresAt < new Date()) {
-    //   return NextResponse.json({ error: "OTP expired" }, { status: 400 });
-    // }
-
-    job.status = "in_progress";
-
-    const booking = await Booking.findById(job.bookingId).populate(
-      "customerId",
+    const parsed = StartSchema.parse(await request.json());
+    const job = await withAssignedJob(
+      id,
+      String(tech._id),
+      async ({ job: assigned, session }) => {
+        if (assigned.status !== "arrived")
+          throw new ApiAuthError("You must reach the customer first", 400);
+        if (!assigned.otp || assigned.otp !== parsed.otp)
+          throw new ApiAuthError("Invalid OTP", 400);
+        const started = await Job.findOneAndUpdate(
+          {
+            _id: assigned._id,
+            technicianId: tech._id,
+            status: "arrived",
+            otp: parsed.otp,
+          },
+          {
+            $set: {
+              status: "in_progress",
+              customerOtpVerifiedAt: new Date(),
+              startTime: assigned.startTime || new Date(),
+            },
+            $unset: { arrivalTracking: 1 },
+          },
+          { returnDocument: "after", session },
+        );
+        if (!started)
+          throw new ApiAuthError(
+            "Job status changed. Refresh before starting.",
+            409,
+          );
+        return started;
+      },
     );
-    const customer = booking?.customerId as any;
-
-    // await notifyJobStatus({
-    //   customerUserId: customer?.userId ? String(customer.userId) : undefined,
-    //   jobId: job._id.toString(),
-    //   bookingId: String(job.bookingId),
-    //   title: "Service started",
-    //   message: "Your service work has started",
-    // });
-    // job.customerOtpVerifiedAt = new Date();
-    // job.startTime = new Date();
-    await job.save();
-
-    //-----------------------------------------------
-    // notify customer - service started or vefified
-    //-----------------------------------------------
-
-    const recipients =
-  await getJobNotificationRecipients(
-    job._id.toString(),
-  );
-
-await notifyCustomerOtpVerified({
-  customerUserId:
-    recipients.customerUserId!,
-
-  jobId:
-    job._id.toString(),
-
-  bookingId:
-    job.bookingId.toString(),
-});
-//----------------------------------------------------
-
-    return NextResponse.json({ job });
-  } catch (err: any) {
-    if (err.name === "ZodError") {
-      return NextResponse.json({ error: err.errors }, { status: 400 });
-    }
-
-    return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: err.status || 500 },
-    );
+    const recipients = await getJobNotificationRecipients(job._id.toString());
+    await notifyCustomerOtpVerified({
+      customerUserId: recipients.customerUserId!,
+      jobId: job._id.toString(),
+      bookingId: String(job.bookingId),
+    });
+    return privateJson({ job });
+  } catch (error) {
+    return apiFailure(error);
   }
 }

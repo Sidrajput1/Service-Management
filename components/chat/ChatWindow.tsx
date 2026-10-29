@@ -1,284 +1,32 @@
 "use client";
-
-import api from "@/lib/api";
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Socket, io } from "socket.io-client";
-import { Button } from "../ui/button";
-import { Paperclip, Send } from "lucide-react";
-import { Avatar, AvatarFallback } from "../ui/avatar";
-import { ScrollArea } from "../ui/scroll-area";
-import { Badge } from "../ui/badge";
-
-type ChatMessage = {
-  _id: string;
-  conversationId: string;
-  senderId: string;
-  senderRole: string;
-  text: string;
-  attachments?: Array<{ url: string; name?: string }>;
-  messageType: "text" | "system" | "file";
-  createdAt: string;
-  updatedAt: string;
-};
-
-type ChatWindowProps = {
-  conversationId: string;
-  currentUserId: string;
-  currentUserRole: "admin" | "dispatcher" | "technician" | "customer";
-  currentUserName?: string;
-  className?: string;
-};
-
-export default function ChatWindow({
-  conversationId,
-  currentUserId,
-  currentUserRole,
-  currentUserName,
-  className = "",
-}: ChatWindowProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-
+import { Send, RefreshCw, MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useChatHistory, useSendChatMessage, useReadConversation, useChatConnection } from "@/hooks/useChat";
+import { dateTime } from "@/lib/customer-types";
+export type ChatWindowProps = { conversationId: string; currentUserId: string; currentUserRole: "admin" | "dispatcher" | "technician" | "customer"; currentUserName?: string; className?: string };
+function safeAttachment(url: string) { try { return new URL(url).protocol === "https:" ? url : null; } catch { return null; } }
+export default function ChatWindow({ conversationId, currentUserId, className = "" }: ChatWindowProps) {
+  const history = useChatHistory(conversationId);
+  const send = useSendChatMessage(conversationId);
+  const read = useReadConversation(conversationId);
+  const connected = useChatConnection(conversationId);
   const [text, setText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [conversation, setConversation] = useState<any>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const socketRef = useRef<Socket | null>(null);
-
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-
-  const socketUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_SOCKET_URL || undefined,
-    [],
-  );
-
-  console.log(process.env.NEXT_PUBLIC_SOCKET_URL);
-
-  useEffect(() => {
-    async function loadMessage() {
-      try {
-        setLoading(true);
-        const { data } = await api.get(
-          `/chats/conversations/${conversationId}/message`,
-        );
-        setConversation(data.conversation);
-        setMessages(data.messages || []);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadMessage();
-  }, [conversationId]);
-
-  useEffect(() => {
-    const socket = io(socketUrl, {
-      transports: ["websocket"],
-      auth: {
-        user: {
-          id: currentUserId,
-          role: currentUserRole,
-          name: currentUserName || "",
-        },
-      },
-    });
-
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      socket.emit("conversation:join", { conversationId });
-    });
-
-    socket.on("message:new", (message: ChatMessage) => {
-      if (String(message.conversationId) !== String(conversationId)) return;
-
-      setMessages((prev) => {
-        const exists = prev.some((m) => String(m._id) === String(message._id));
-        if (exists) return prev;
-        return [...prev, message];
-      });
-    });
-
-    socket.on("conversation:update", (payload: any) => {
-      if (String(payload.conversationId) !== String(conversationId)) return;
-
-      setConversation((prev: any) =>
-        prev
-          ? {
-              ...prev,
-              lastMessageText: payload.lastMessageText ?? prev.lastMessageText,
-              lastMessageAt: payload.lastMessageAt ?? prev.lastMessageAt,
-            }
-          : prev,
-      );
-    });
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [
-    conversationId,
-    currentUserId,
-    currentUserRole,
-    currentUserName,
-    socketUrl,
-  ]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
-    async function markRead() {
-      try {
-        await api.post(`/chats/conversations/${conversationId}/read`);
-      } catch {
-        // ignore
-      }
-    }
-
-    if (conversationId) markRead();
-  }, [conversationId, messages.length]);
-
-  async function sendMessage() {
-    const trimmed = text.trim();
-
-    if (!trimmed || sending) return;
-    setSending(true);
-
-    try {
-      const { data } = await api.post(
-        `/chats/conversations/${conversationId}/message`,
-        {
-          text: trimmed,
-        },
-      );
-
-      if (data?.message) {
-        setMessages((prev) => {
-          const exists = prev.some(
-            (m) => String(m._id) === String(data.message._id),
-          );
-          if (exists) return prev;
-          return [...prev, data.message];
-        });
-      }
-
-      setText("");
-    } finally {
-      setSending(false);
-    }
+  const retryKey = useRef("");
+  const listRef = useRef<HTMLDivElement>(null);
+  const messages = useMemo(() => [...new Map((history.data?.pages || []).slice().reverse().flatMap(page => page.messages).map(message => [message._id, message])).values()], [history.data]);
+  const latestId = messages.at(-1)?._id;
+  const markRead = read.mutate;
+  useEffect(() => { if (latestId) markRead(); }, [latestId, markRead]);
+  useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [latestId]);
+  const conversation = history.data?.pages[0]?.conversation;
+  async function submit() {
+    if (!text.trim() || send.isPending) return;
+    retryKey.current ||= crypto.randomUUID();
+    try { await send.mutateAsync({ text: text.trim(), clientMessageId: retryKey.current }); setText(""); retryKey.current = ""; } catch { /* Text and retry key remain available for a safe retry. */ }
   }
-  return (
-    
-    <div className={`flex h-[75vh] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl ${className}`}>
-      
-      {/* 🔥 HEADER */}
-      <div className="border-b bg-linear-to-r from-slate-950 via-emerald-700 to-teal-600 px-5 py-4 text-white">
-        <div className="text-sm font-semibold">
-          {conversation?.subject || "Job Chat"}
-        </div>
-        <div className="text-xs text-white/70">
-          Live conversation • {currentUserRole}
-        </div>
-      </div>
-
-      {/* 🔥 MESSAGES */}
-      <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4">
-        {loading ? (
-          <div className="text-center text-sm text-slate-500">
-            Loading messages...
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="rounded-2xl border border-dashed p-6 text-sm text-slate-500">
-              No messages yet. Start conversation 👇
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {messages.map((message) => {
-              const mine =
-                String(message.senderId) === String(currentUserId);
-
-              return (
-                <div
-                  key={message._id}
-                  className={`flex ${mine ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[75%] rounded-3xl px-4 py-3 text-sm shadow-sm ${
-                      mine
-                        ? "bg-linear-to-r from-slate-900 to-slate-700 text-white"
-                        : "bg-white border border-slate-200 text-slate-900"
-                    }`}
-                  >
-                    {message.text && <div>{message.text}</div>}
-
-                    {/* Attachments */}
-                    {message.attachments?.length ? (
-                      <div className="mt-2 space-y-1">
-                        {message.attachments.map((file, idx) => (
-                          <a
-                            key={idx}
-                            href={file.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={`block text-xs underline ${
-                              mine ? "text-white/80" : "text-slate-600"
-                            }`}
-                          >
-                            {file.name || "Attachment"}
-                          </a>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div
-                      className={`mt-2 text-[10px] ${
-                        mine ? "text-white/60" : "text-slate-400"
-                      }`}
-                    >
-                      {new Date(message.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </div>
-
-      {/* 🔥 INPUT AREA */}
-      <div className="border-t bg-white p-4">
-        <div className="rounded-3xl border bg-slate-50 p-3 shadow-sm">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (!sending && text.trim()) sendMessage();
-              }
-            }}
-            placeholder="Type your message..."
-            className="min-h-20 w-full resize-none bg-transparent text-black text-sm outline-none"
-          />
-
-          <div className="mt-3 flex justify-end">
-            <Button
-              onClick={sendMessage}
-              disabled={sending || !text.trim()}
-              className="rounded-xl bg-linear-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700"
-            >
-              {sending ? "Sending..." : "Send"}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <section className={`flex h-[min(72dvh,720px)] min-h-105 flex-col overflow-hidden rounded-2xl border border-border bg-card ${className}`} aria-label="Service conversation"><header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4"><div><h2 className="flex items-center gap-2 text-sm font-bold"><MessageCircle className="size-4 text-primary" />{conversation?.subject || "Service conversation"}</h2><p className="mt-1 text-[11px] text-muted-foreground">{connected ? "Connected · updates arrive in real time" : "Periodic refresh · messages remain available"}</p></div><Button variant="ghost" className="size-11" aria-label="Refresh messages" onClick={() => history.refetch()}><RefreshCw className={`size-4 ${history.isFetching ? "animate-spin" : ""}`} /></Button></header>
+    <div className="flex-1 overflow-y-auto px-4 py-5" ref={listRef} role="log" aria-live="polite" aria-relevant="additions text">{history.hasNextPage && <div className="mb-5 text-center"><Button variant="outline" className="h-11 px-4" disabled={history.isFetchingNextPage} onClick={() => history.fetchNextPage()}>{history.isFetchingNextPage ? "Loading history…" : "Load earlier messages"}</Button></div>}{history.isLoading && <p role="status" className="text-center text-sm text-muted-foreground">Loading messages…</p>}{history.isError && <p role="alert" className="mb-5 rounded-xl bg-primary/5 p-4 text-sm text-primary">Message history is temporarily unavailable. Use Refresh messages to try again.</p>}{!history.isLoading && !history.isError && !messages.length && <p className="py-12 text-center text-sm text-muted-foreground">No messages yet. Say hello to your service team.</p>}<div className="space-y-4">{messages.map(message => <div key={message._id} className={`flex ${message.senderId === currentUserId ? "justify-end" : "justify-start"}`}><article className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.senderId === currentUserId ? "bg-primary/8 text-foreground" : "border border-border bg-muted/40"}`}><p className="mb-1 text-[10px] font-bold text-muted-foreground">{message.senderId === currentUserId ? "You" : message.senderRole === "technician" ? "Pro" : "Service team"}</p><p className="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]">{message.text}</p>{message.attachments?.map((file, index) => safeAttachment(file.url) && <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-xs text-primary underline">{file.name || "View attachment"}</a>)}<time className="mt-2 block text-[10px] text-muted-foreground" dateTime={message.createdAt}>{dateTime(message.createdAt)}</time></article></div>)}</div></div>
+    <form onSubmit={event => { event.preventDefault(); void submit(); }} className="border-t border-border p-4">{send.isError && <p role="alert" className="mb-3 text-xs leading-6 text-primary">Your message wasn’t confirmed. Your text is saved below; send it again to retry safely.</p>}{conversation?.isClosed ? <p className="text-sm text-muted-foreground">This conversation is closed. Its history is still available.</p> : <div className="flex items-end gap-3"><label htmlFor={`chat-${conversationId}`} className="sr-only">Your message</label><textarea id={`chat-${conversationId}`} value={text} maxLength={4000} rows={2} onChange={event => { setText(event.target.value); retryKey.current = ""; }} placeholder="Write a message to your service team…" className="min-w-0 flex-1 resize-none rounded-xl border border-input bg-background p-3 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring" /><Button type="submit" className="size-12 rounded-xl bg-primary text-primary-foreground" aria-label={send.isPending ? "Sending message" : "Send message"} disabled={send.isPending || !text.trim() || !conversation}><Send className="size-4" /></Button></div>}</form>
+  </section>;
 }

@@ -113,6 +113,7 @@ export async function POST(req: Request) {
   invoiceId: invoice._id.toString(),
   bookingId: booking._id.toString(),
   invoiceNumber: invoice.invoiceNumber,
+  amount: invoice.grandTotal,
 });
 
     job.invoiceId = invoice._id;

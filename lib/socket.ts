@@ -1,22 +1,38 @@
-import type {Server as  SocketIOServer} from "socket.io";
+import type { Server as SocketIOServer } from "socket.io";
 
 declare global {
-    var io : SocketIOServer | undefined;
-};
+  var io:
+    | (SocketIOServer & {
+        emitAuthorizedJobStatus?: (id: string) => Promise<void>;
+        emitAuthorizedConversation?: (
+          id: string,
+          event: string,
+          payload: unknown,
+        ) => Promise<void>;
+      })
+    | undefined;
+}
 
-export function getIO(){
-    return global.io;
-};
+export function getIO() {
+  return global.io;
+}
 
-export function emitConversationMessage(conversationId: string, payload: any){
-    global.io?.to(`conversation:${conversationId}`).emit("message:new", payload);
+export function emitConversationMessage(conversationId: string, payload: any) {
+  void global.io
+    ?.emitAuthorizedConversation?.(conversationId, "message:new", payload)
+    .catch(() => undefined);
+}
 
-};
+export function emitConversationUpdate(conversationId: string, payload: any) {
+  void global.io
+    ?.emitAuthorizedConversation?.(
+      conversationId,
+      "conversation:update",
+      payload,
+    )
+    .catch(() => undefined);
+}
 
-export function emitConversationUpdate(conversationId:string,payload:any){
-    global.io?.to(`conversation:${conversationId}`).emit("conversation:update", payload);
-};
-
-export function emitToUSer(userId: string,event:string,payload:any){
-    global.io?.to(`user:${userId}`).emit(event, payload);
+export function emitToUSer(userId: string, event: string, payload: any) {
+  global.io?.to(`user:${userId}`).emit(event, payload);
 }

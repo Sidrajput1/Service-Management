@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { connectToDb } from "@/lib/db";
 import Invoice from "@/models/invoice";
 import { calculateInvoiceTotal } from "@/lib/billing";
+import { assertInvoiceMutable } from "@/lib/finance-ledger";
 
 
 
@@ -39,6 +40,8 @@ export async function POST(request: Request, { params }:  { params: Promise<{ id
       ...item,
       amount: Number(item.qty) * Number(item.unitPrice),
     }));
+
+    await assertInvoiceMutable(invoice);
 
     invoice.items = [...invoice.items, ...newItems] as any;
 

@@ -1,47 +1,53 @@
 "use client";
-
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
-import { useRouter } from "next/navigation";
-
+import { FinalBillPanel } from "@/components/finance/FinalBillPanel";
+import { CancellationPanel } from "@/components/finance/BookingActions";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import type { Session } from "next-auth";
+import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   ArrowRight,
   BadgeCheck,
   Camera,
+  Check,
   CheckCircle2,
   ClipboardCopy,
   Clock3,
-  FileImage,
+  FileText,
   Loader2,
+  LockKeyhole,
   MapPin,
-  MessageSquare,
-  Navigation,
-  PackagePlus,
   Phone,
+  RefreshCw,
   ShieldCheck,
-  TimerReset,
-  Truck,
-  User2,
+  TriangleAlert,
+  UserRound,
   Wallet,
-  Wrench,
 } from "lucide-react";
-
+import { ServiceAddressPreview } from "@/components/maps/ServiceAddressPreview";
+import { ProJourney } from "./ProJourney";
+import { useJobStatusConnection } from "@/hooks/useJobStatusConnection";
 import {
   useAcceptTechnicianJob,
   useArriveTechnicianJob,
   useCompleteTechnicianJob,
   useStartTechnicianJob,
-  useTechnicianJobs,
+  useTechnicianJob,
   useUploadTechnicianProof,
 } from "@/hooks/useTechnicianJobs";
-
 import { uploadToCloudinary } from "@/lib/cloudinary";
-
+import {
+  technicianWorkflow,
+  technicianInvoiceId,
+  technicianMutationMessage,
+  technicianRequestStatus,
+  createTechnicianActionGate,
+} from "@/lib/technician-workflow.mjs";
+import type {
+  TechnicianJobDetailResponse,
+  TechnicianMutationResponse,
+} from "@/lib/technician-job-types";
 import {
   Card,
   CardContent,
@@ -49,1504 +55,954 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-import {
-  Button,
-} from "@/components/ui/button";
-
-import {
-  Badge,
-} from "@/components/ui/badge";
-
-import {
-  Input,
-} from "@/components/ui/input";
-
-import {
-  Textarea,
-} from "@/components/ui/textarea";
-
-import {
-  Separator,
-} from "@/components/ui/separator";
-
-import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
-
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import JobChatPanel from "@/components/chat/JobChatPanel";
-
 import JobPartsUsed from "./jobPartUsed";
-
-import {
-  toast,
-} from "sonner";
-
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-function formatDate(
-  date?: string | Date | null,
-) {
-  if (!date) return "-";
-
-  try {
-    return new Date(
-      date,
-    ).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "-";
-  }
-}
-
-function formatDateOnly(
-  date?: string | Date | null,
-) {
-  if (!date) return "-";
-
-  try {
-    return new Date(
-      date,
-    ).toLocaleDateString(
-      undefined,
-      {
-        year: "numeric",
-        month: "short",
+function dateLabel(value?: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleString("en-IN", {
         day: "numeric",
-      },
-    );
+        month: "short",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+}
+function money(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+        maximumFractionDigits: 2,
+      }).format(value)
+    : null;
+}
+function safeProofUrl(value?: string) {
+  try {
+    const url = new URL(value || "");
+    return url.protocol === "https:" ? url.href : null;
   } catch {
-    return "-";
+    return null;
   }
 }
-
-function formatCountdown(
-  expiresAt?: string | Date | null,
-) {
-  if (!expiresAt) return "-";
-
-  const diff =
-    new Date(
-      expiresAt,
-    ).getTime() -
-    Date.now();
-
-  if (Number.isNaN(diff)) {
-    return "-";
-  }
-
-  if (diff <= 0) {
-    return "Expired";
-  }
-
-  const totalMinutes =
-    Math.floor(
-      diff / 1000 / 60,
-    );
-
-  const hours =
-    Math.floor(
-      totalMinutes / 60,
-    );
-
-  const minutes =
-    totalMinutes % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-
-  return `${minutes}m`;
-}
-
-function getInitials(
-  name?: string,
-) {
-  if (!name) return "J";
-
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(
-      (part) =>
-        part[0]?.toUpperCase(),
-    )
-    .join("");
-}
-
-function statusBadge(
-  status?: string,
-) {
-  const value =
-    (
-      status || ""
-    ).toLowerCase();
-
-  if (
-    value === "completed"
-  ) {
-    return (
-      <Badge className="rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-        Completed
-      </Badge>
-    );
-  }
-
-  if (
-    [
-      "accepted",
-      "enroute",
-      "arrived",
-      "otp_verified",
-      "in_progress",
-      "on_hold",
-    ].includes(value)
-  ) {
-    return (
-      <Badge className="rounded-full border border-cyan-500/20 bg-cyan-500/10 text-cyan-700 dark:text-cyan-400">
-        Active
-      </Badge>
-    );
-  }
-
-  if (
-    [
-      "assigned",
-      "scheduled",
-    ].includes(value)
-  ) {
-    return (
-      <Badge className="rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400">
-        Assigned
-      </Badge>
-    );
-  }
-
+function BackLink() {
   return (
-    <Badge className="rounded-full border-border bg-muted text-muted-foreground">
-      {status || "New"}
-    </Badge>
-  );
-}
-
-function StepPill({
-  label,
-  done,
-}: {
-  label: string;
-  done: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border px-3 py-2 text-center text-sm font-medium transition",
-        done
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
-          : "border-border bg-background text-muted-foreground",
-      )}
+    <Link
+      href="/technician/all-jobs"
+      className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-primary"
     >
-      {label}
-    </div>
+      <ArrowLeft className="size-4" />
+      My assigned jobs
+    </Link>
   );
 }
-
-function TimelineItem({
-  title,
-  value,
-  time,
-  active,
+function DetailRow({ label, value }: { label: string; value?: string | null }) {
+  return value ? (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-medium [overflow-wrap:anywhere]">
+        {value}
+      </dd>
+    </div>
+  ) : null;
+}
+function JobLoadState({
+  loading,
+  status,
+  retry,
+  refreshing,
 }: {
-  title: string;
-  value?: string | null;
-  time?: string | Date | null;
-  active?: boolean;
+  loading?: boolean;
+  status?: number | null;
+  retry: () => void;
+  refreshing?: boolean;
 }) {
-  return (
-    <div className="relative flex gap-4 pb-6 last:pb-0">
-
-      <div className="absolute bottom-0 left-1.5 top-4 w-px bg-border" />
-
+  if (loading)
+    return (
       <div
-        className={cn(
-          "relative z-10 h-3 w-3 rounded-full",
-          active
-            ? "bg-emerald-500 ring-4 ring-emerald-500/20"
-            : "border border-border bg-muted",
-        )}
-      />
-
-      <div className="flex-1">
-
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold text-foreground">
-            {title}
-          </h4>
-
-          <span className="text-xs text-muted-foreground">
-            {time
-              ? new Date(
-                  time,
-                ).toLocaleString()
-              : "-"}
-          </span>
+        className="space-y-6"
+        role="status"
+        aria-label="Loading assigned job"
+      >
+        <BackLink />
+        <div className="h-28 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-32 animate-pulse rounded-2xl bg-muted" />
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="h-80 animate-pulse rounded-2xl bg-muted lg:col-span-2" />
+          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
         </div>
-
-        <p className="mt-1 text-sm text-muted-foreground">
-          {value ||
-            "Not recorded yet"}
-        </p>
-
+        <span className="sr-only">Loading your assigned job details</span>
       </div>
+    );
+  const missing = status === 404,
+    denied = status === 401 || status === 403;
+  return (
+    <div className="space-y-5">
+      <BackLink />
+      <Card className="rounded-2xl">
+        <CardContent className="py-12 text-center" role="alert">
+          <TriangleAlert className="mx-auto size-9 text-primary" />
+          <h1 className="mt-5 font-display text-2xl font-semibold">
+            {missing
+              ? "Assigned job unavailable"
+              : denied
+                ? "Pro access required"
+                : "We couldn't load this job"}
+          </h1>
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-muted-foreground">
+            {missing
+              ? "The job may no longer be assigned to you, or its record is unavailable. Return to your jobs or check with your service provider."
+              : denied
+                ? "Your Pro session does not have access to this job. Sign in again or return to your assigned jobs."
+                : "The job details could not be confirmed. Retry to load the saved workflow before taking action."}
+          </p>
+          <Button
+            className="mt-6 min-h-11"
+            variant="outline"
+            onClick={retry}
+            disabled={refreshing}
+          >
+            <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+            {refreshing ? "Retrying…" : "Try again"}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
-
-function MetricCard({
-  label,
-  value,
-  icon,
-  note,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  note?: string;
-}) {
-  return (
-    <Card className="border-border bg-card shadow-sm">
-      <CardContent className="p-4">
-
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-border bg-muted/50">
-          {icon}
-        </div>
-
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-
-        <p className="mt-1 text-xl font-semibold tracking-tight text-foreground">
-          {value}
-        </p>
-
-        {note && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            {note}
-          </p>
-        )}
-
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function TechnicianJobDetail({
   session,
   jobId,
 }: {
-  session: any;
+  session: Session | null;
   jobId: string;
 }) {
-  const router =
-    useRouter();
-
-  const {
-    data,
-    isLoading,
-    refetch,
-  } = useTechnicianJobs();
-
-  const [
-    otp,
-    setOtp,
-  ] = useState("");
-
-  const [
-    proofNote,
-    setProofNote,
-  ] = useState("");
-
-  const [
-    proofFiles,
-    setProofFiles,
-  ] = useState<File[]>(
-    [],
-  );
-
-  const acceptJob =
-    useAcceptTechnicianJob();
-
-  const arriveJob =
-    useArriveTechnicianJob();
-
-  const startJob =
-    useStartTechnicianJob();
-
-  const uploadProof =
-    useUploadTechnicianProof();
-
-  const completeJob =
-    useCompleteTechnicianJob();
-
-  const jobs =
-    data?.jobs || [];
-
-  const job = useMemo(
-    () =>
-      jobs.find(
-        (item: any) =>
-          item._id === jobId,
-      ) || null,
-    [jobs, jobId],
-  );
-
-  useEffect(() => {
-    if (!job) return;
-
-    setOtp("");
-    setProofNote("");
-    setProofFiles([]);
-  }, [job?._id]);
-
-  if (isLoading) {
+  const query = useTechnicianJob(jobId),
+    status = technicianRequestStatus(query.error);
+  const unavailable = [401, 403, 404].includes(status || 0);
+  const job = unavailable ? null : query.data?.job;
+  useJobStatusConnection(job?._id, job?.bookingId?._id);
+  if (query.isPending && !job)
+    return <JobLoadState loading retry={() => void query.refetch()} />;
+  if (!job)
     return (
-      <div className="space-y-5">
-        <div className="h-12 w-40 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-40 animate-pulse rounded-3xl bg-muted" />
-        <div className="h-125 animate-pulse rounded-3xl bg-muted" />
-      </div>
+      <JobLoadState
+        status={status}
+        refreshing={query.isFetching}
+        retry={() => void query.refetch()}
+      />
     );
-  }
+  return (
+    <WorkflowContent
+      key={`${job._id}:${session?.user.id}`}
+      data={{ ...query.data, job }}
+      session={session}
+      refresh={() => query.refetch()}
+      refreshing={query.isFetching}
+      refreshFailed={query.isError}
+    />
+  );
+}
 
-  if (!job) {
-    return (
-      <Card className="rounded-3xl border-dashed">
-        <CardContent className="p-12 text-center">
-
-          <Wrench className="mx-auto h-8 w-8 text-muted-foreground" />
-
-          <h2 className="mt-4 text-lg font-semibold">
-            Job not found
-          </h2>
-
-          <p className="mt-1 text-sm text-muted-foreground">
-            This job is not available in your assigned jobs.
-          </p>
-
-          <Button
-            className="mt-5 rounded-2xl"
-            onClick={() =>
-              router.push(
-                "/technician/dashboard",
-              )
-            }
-          >
-            Back to dashboard
-          </Button>
-
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const customer =
-    job.bookingId
-      ?.customerId;
-
-  const address =
-    job.bookingId?.address;
-
-  const coords =
-    address
-      ?.location
-      ?.coordinates || [];
-
-  const mapUrl =
-    coords.length === 2
-      ? `https://www.google.com/maps?q=${coords[1]},${coords[0]}`
-      : null;
-
-  const status =
-    (
-      job.status || ""
-    ).toLowerCase();
-
-  const progress =
-    [
-      "assigned",
-      "enroute",
-      "arrived",
-      "in_progress",
-      "completed",
-    ].findIndex(
-      (item) => {
-        if (
-          status ===
-          "otp_verified"
-        ) {
-          return item === "in_progress";
+function WorkflowContent({
+  data,
+  session,
+  refresh,
+  refreshing,
+  refreshFailed,
+}: {
+  data: TechnicianJobDetailResponse;
+  session: Session | null;
+  refresh: () => Promise<unknown>;
+  refreshing: boolean;
+  refreshFailed: boolean;
+}) {
+  const { job } = data,
+    booking = job.bookingId,
+    customer = booking?.customerId;
+  const capabilities =
+    refreshFailed && data.workflow
+      ? {
+          ...data.workflow,
+          access: "read_only" as const,
+          reason:
+            "The latest job refresh failed. Refresh successfully before making another update.",
         }
+      : data.workflow;
+  const workflow = technicianWorkflow(job, capabilities),
+    action = workflow.action;
+  const [otp, setOtp] = useState(""),
+    [proofNote, setProofNote] = useState(""),
+    [proofFiles, setProofFiles] = useState<File[]>([]),
+    [busy, setBusy] = useState<string | null>(null);
+  const [gate] = useState(() => createTechnicianActionGate());
+  const mounted = useRef(true),
+    uploaded = useRef(new Map<File, { url: string; public_id: string }>());
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const accept = useAcceptTechnicianJob(),
+    arrive = useArriveTechnicianJob(),
+    start = useStartTechnicianJob(),
+    proof = useUploadTechnicianProof(),
+    complete = useCompleteTechnicianJob();
+  const mutating = Boolean(
+    busy ||
+      accept.isPending ||
+      arrive.isPending ||
+      start.isPending ||
+      proof.isPending ||
+      complete.isPending,
+  );
+  const invoiceId = technicianInvoiceId(job);
+  const proofs = (job.proofIds || []).filter(
+    (item): item is Exclude<typeof item, string> =>
+      typeof item === "object" && item !== null,
+  );
+  const bookedPrice =
+    money(booking?.estimatedPrice) || money(booking?.pricing?.finalPrice);
+  const schedule = dateLabel(job.scheduledAt || booking?.scheduledAt);
+  const phone =
+    typeof customer?.phone === "string" &&
+    /^[+\d\s()-]{5,25}$/u.test(customer.phone)
+      ? customer.phone.replace(/[\s()-]/gu, "")
+      : null;
+  const history = (
+    [
+      ["created", "Job created", job.createdAt],
+      ["accepted", "Assignment accepted", job.acceptedAt],
+      [
+        "arrived",
+        job.arrivalMethod === "automatic"
+          ? "Arrival confirmed automatically"
+          : "Arrival confirmed",
+        job.arrivedAt,
+      ],
+      ["otp", "Customer OTP verified", job.customerOtpVerifiedAt],
+      ["started", "Service work started", job.startTime],
+      ["proof", "Latest proof saved", job.proofSubmittedAt],
+      [
+        "ended",
+        job.status === "completed" ? "Service completed" : "Service ended",
+        job.endTime,
+      ],
+      ["paid", "Payment recorded", job.paymentReceivedAt],
+    ] as const
+  )
+    .filter((entry) => dateLabel(entry[2]))
+    .sort((a, b) => new Date(a[2]!).getTime() - new Date(b[2]!).getTime());
 
-        return (
-          item === status
+  async function runAction(
+    key: string,
+    work: () => Promise<TechnicianMutationResponse | void>,
+    success: string,
+  ) {
+    await gate.run(async () => {
+      if (!workflow.active || !mounted.current) return;
+      setBusy(key);
+      try {
+        const result = await work();
+        if (!mounted.current) return;
+        if (key === "start") setOtp("");
+        if (key === "proof") {
+          setProofFiles([]);
+          setProofNote("");
+          uploaded.current.clear();
+        }
+        toast.success(
+          result?.invoice?.invoiceNumber
+            ? `Invoice ${result.invoice.invoiceNumber} is ready.`
+            : success,
         );
-      },
-    );
-
-  const canAccept =
-    [
-      "assigned",
-      "scheduled",
-    ].includes(
-      status,
-    );
-
-  const canArrive =
-    [
-      "accepted",
-      "enroute",
-    ].includes(
-      status,
-    );
-
-  const canStart =
-    status === "arrived";
-
-  const canComplete =
-    [
-      "in_progress",
-      "on_hold",
-    ].includes(
-      status,
-    );
-
-  async function handleAccept() {
-    try {
-      await acceptJob.mutateAsync(
-        job._id,
-      );
-
-      await refetch();
-
-      toast.success(
-        "Job accepted",
-      );
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data
-          ?.error ||
-          error?.message ||
-          "Unable to accept job",
-      );
-    }
+      } catch (error) {
+        if (mounted.current) toast.error(technicianMutationMessage(error));
+      } finally {
+        if (mounted.current) setBusy(null);
+      }
+    });
   }
-
-  async function handleArrive() {
-    try {
-      await arriveJob.mutateAsync(
-        job._id,
-      );
-
-      await refetch();
-
-      toast.success(
-        "Marked as arrived",
-      );
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data
-          ?.error ||
-          error?.message ||
-          "Unable to update arrival",
-      );
-    }
-  }
-
-  async function handleStart() {
-    if (!otp.trim()) {
-      toast.error(
-        "Enter the customer OTP",
-      );
+  function submitPrimary(event?: FormEvent) {
+    event?.preventDefault();
+    if (!action || mutating) return;
+    if (action.key === "proof") {
+      void submitProof();
       return;
     }
-
-    try {
-      await startJob.mutateAsync({
-        id: job._id,
-        otp: otp.trim(),
-      });
-
-      setOtp("");
-
-      await refetch();
-
-      toast.success(
-        "OTP verified. Job started.",
-      );
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data
-          ?.error ||
-          error?.message ||
-          "Unable to verify OTP",
-      );
-    }
-  }
-
-  async function handleComplete() {
-    try {
-      const result =
-        await completeJob.mutateAsync(
-          job._id,
-        );
-
-      await refetch();
-
-      toast.success(
-        result?.invoice
-          ?.invoiceNumber
-          ? `Job completed. Invoice ${result.invoice.invoiceNumber} generated.`
-          : "Job completed successfully.",
-      );
-    } catch (error: any) {
-      toast.error(
-        error?.response?.data
-          ?.error ||
-          error?.message ||
-          "Unable to complete job",
-      );
-    }
-  }
-
-  async function handleUploadProof() {
-    if (
-      proofFiles.length === 0
-    ) {
-      toast.error(
-        "Select at least one image",
-      );
+    if (action.key === "start" && otp.trim().length < 4) {
+      toast.error("Enter the OTP provided by the customer.");
       return;
     }
-
-    try {
-      const uploaded =
-        await Promise.all(
-          proofFiles.map(
-            (file) =>
-              uploadToCloudinary(
-                file,
-              ),
-          ),
-        );
-
-      const proofs =
-        uploaded.map(
-          (item) => ({
-            url: item.url,
-            type: "photo",
-            metadata: {
-              public_id:
-                item.public_id,
-            },
+    const execute =
+      action.key === "accept"
+        ? () => accept.mutateAsync(job._id)
+        : action.key === "arrive"
+          ? () => arrive.mutateAsync(job._id)
+          : action.key === "start"
+            ? () => start.mutateAsync({ id: job._id, otp: otp.trim() })
+            : () => complete.mutateAsync(job._id);
+    void runAction(
+      action.key,
+      execute,
+      action.key === "accept"
+        ? "Assignment accepted. Your saved status is En route."
+        : action.key === "arrive"
+          ? "Your arrival is confirmed. Ask the customer for their OTP."
+          : action.key === "start"
+            ? "Customer OTP verified. Service work has started."
+            : action.key === "invoice"
+              ? "Invoice operation confirmed."
+              : "Service completion confirmed.",
+    );
+  }
+  async function submitProof(event?: FormEvent) {
+    event?.preventDefault();
+    if (!workflow.canUploadProof || !proofFiles.length || mutating) return;
+    await runAction(
+      "proof",
+      async () => {
+        const files = await Promise.all(
+          proofFiles.map(async (file) => {
+            let item = uploaded.current.get(file);
+            if (!item) {
+              item = await uploadToCloudinary(file);
+              uploaded.current.set(file, item);
+            }
+            return item;
           }),
         );
-
-      await uploadProof.mutateAsync(
-        {
+        if (!mounted.current) return;
+        return proof.mutateAsync({
           id: job._id,
           payload: {
-            proofNote,
-            proofs,
+            proofNote: proofNote.trim(),
+            proofs: files.map((file) => ({
+              url: file.url,
+              type: "photo",
+              metadata: { public_id: file.public_id },
+            })),
           },
-        },
-      );
-
-      setProofFiles([]);
-      setProofNote("");
-
-      await refetch();
-
-      toast.success(
-        "Proof uploaded",
-      );
-    } catch (error: any) {
-      console.error(
-        "Proof upload error",
-        error,
-      );
-
-      toast.error(
-        "Unable to upload proof",
-      );
-    }
+        });
+      },
+      "Service proof saved.",
+    );
   }
-
-  async function copyJobId() {
-    try {
-      await navigator.clipboard.writeText(
-        job._id,
-      );
-
-      toast.success(
-        "Job ID copied",
-      );
-    } catch {
-      toast.error(
-        "Unable to copy job ID",
-      );
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-
-      {/* Back */}
-      <Button
-        variant="ghost"
-        className="-ml-3 rounded-xl"
-        onClick={() =>
-          router.push(
-            "/technician",
-          )
-        }
+  function proofForm(primary = false) {
+    return (
+      <form
+        onSubmit={submitProof}
+        className="mt-5 space-y-4"
+        aria-label="Service proof upload"
       >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to jobs
-      </Button>
-
-      {/* Header */}
-      <Card className="overflow-hidden rounded-3xl border-border bg-card shadow-sm">
-
-        <CardContent className="p-0">
-
-          <div className="border-b border-border/70 bg-muted/20 p-6 sm:p-8">
-
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-
-              <div className="min-w-0">
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="rounded-full border border-border bg-background text-muted-foreground">
-                    <ShieldCheck className="mr-1 h-3.5 w-3.5" />
-                    Job execution
-                  </Badge>
-
-                  {statusBadge(
-                    job.status,
-                  )}
-                </div>
-
-                <h1 className="mt-4 font-poppins text-2xl font-semibold tracking-tight sm:text-3xl">
-                  {job.bookingId?.serviceType ||
-                    "Service job"}
-                </h1>
-
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {customer?.name ||
-                    "Customer"}{" "}
-                  ·{" "}
-                  {customer?.phone ||
-                    "-"}
-                </p>
-
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {address?.addressLine ||
-                    "Address not added"}
-                  {address?.city
-                    ? `, ${address.city}`
-                    : ""}
-                </p>
-
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-
-                <Button
-                  variant="outline"
-                  className="rounded-2xl"
-                  onClick={
-                    copyJobId
-                  }
-                >
-                  <ClipboardCopy className="mr-2 h-4 w-4" />
-                  Copy ID
-                </Button>
-
-                {mapUrl && (
-                  <Button
-                    variant="outline"
-                    className="rounded-2xl"
-                    onClick={() =>
-                      window.open(
-                        mapUrl,
-                        "_blank",
-                        "noopener,noreferrer",
-                      )
-                    }
-                  >
-                    <Navigation className="mr-2 h-4 w-4" />
-                    Open location
-                  </Button>
-                )}
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="grid gap-2 p-4 sm:grid-cols-5">
-            <StepPill
-              label="Assigned"
-              done={
-                status ===
-                  "assigned" ||
-                status ===
-                  "scheduled" ||
-                status ===
-                  "accepted" ||
-                status ===
-                  "enroute" ||
-                status ===
-                  "arrived" ||
-                status ===
-                  "otp_verified" ||
-                status ===
-                  "in_progress" ||
-                status ===
-                  "on_hold" ||
-                status ===
-                  "completed"
+        <div>
+          <label
+            htmlFor="service-proof-files"
+            className="mb-2 block text-sm font-semibold"
+          >
+            Service photos
+          </label>
+          <Input
+            id="service-proof-files"
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={mutating}
+            className="h-auto min-h-12 py-3"
+            onChange={(event) => {
+              const files = Array.from(event.target.files || []);
+              if (
+                files.some(
+                  (file) => !file.type.startsWith("image/") || file.size <= 0,
+                )
+              ) {
+                toast.error("Choose valid image files for service proof.");
+                event.target.value = "";
+                return;
               }
-            />
-
-            <StepPill
-              label="En route"
-              done={[
-                "enroute",
-                "arrived",
-                "otp_verified",
-                "in_progress",
-                "on_hold",
-                "completed",
-              ].includes(
-                status,
-              )}
-            />
-
-            <StepPill
-              label="Arrived"
-              done={[
-                "arrived",
-                "otp_verified",
-                "in_progress",
-                "on_hold",
-                "completed",
-              ].includes(
-                status,
-              )}
-            />
-
-            <StepPill
-              label="Started"
-              done={[
-                "otp_verified",
-                "in_progress",
-                "on_hold",
-                "completed",
-              ].includes(
-                status,
-              )}
-            />
-
-            <StepPill
-              label="Completed"
-              done={
-                status ===
-                "completed"
-              }
-            />
-          </div>
-
-        </CardContent>
-      </Card>
-
-      {/* Primary action banner */}
-      {(canAccept ||
-        canArrive ||
-        canStart ||
-        canComplete) && (
-        <Card
-          className={cn(
-            "rounded-3xl",
-            canAccept
-              ? "border-amber-500/20 bg-amber-500/5"
-              : "border-cyan-500/20 bg-cyan-500/5",
-          )}
-        >
-          <CardContent className="p-5 sm:p-6">
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {canAccept
-                    ? "Action required"
-                    : canArrive
-                      ? "Continue your job"
-                      : canStart
-                        ? "Customer verification required"
-                        : "Finish the service"}
-                </p>
-
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {canAccept
-                    ? "Review the booking and accept the assignment."
-                    : canArrive
-                      ? "You are assigned. Mark your arrival when you reach the location."
-                      : canStart
-                        ? "Enter the customer OTP to start the service."
-                        : "Make sure the work and proof are complete before closing the job."}
-                </p>
-              </div>
-
-              {canAccept && (
-                <Button
-                  className="h-11 rounded-2xl bg-amber-600 px-6 text-white hover:bg-amber-700"
-                  onClick={
-                    handleAccept
-                  }
-                  disabled={
-                    acceptJob.isPending
-                  }
-                >
-                  {acceptJob.isPending
-                    ? "Accepting..."
-                    : "Accept job"}
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
-
-              {canArrive && (
-                <Button
-                  className="h-11 rounded-2xl bg-cyan-600 px-6 text-white hover:bg-cyan-700"
-                  onClick={
-                    handleArrive
-                  }
-                  disabled={
-                    arriveJob.isPending
-                  }
-                >
-                  {arriveJob.isPending
-                    ? "Updating..."
-                    : "Mark arrived"}
-                  <Truck className="ml-2 h-4 w-4" />
-                </Button>
-              )}
-
-              {canComplete && (
-                <Button
-                  className="h-11 rounded-2xl bg-emerald-600 px-6 text-white hover:bg-emerald-700"
-                  onClick={
-                    handleComplete
-                  }
-                  disabled={
-                    completeJob.isPending
-                  }
-                >
-                  {completeJob.isPending
-                    ? "Completing..."
-                    : "Complete job"}
-                  <CheckCircle2 className="ml-2 h-4 w-4" />
-                </Button>
-              )}
-
-            </div>
-
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-
-        {/* Main */}
-        <div className="space-y-6">
-
-          {/* Customer */}
-          <Card className="rounded-3xl border-border bg-card shadow-sm">
-
-            <CardHeader>
-              <CardTitle>
-                Customer & booking
-              </CardTitle>
-
-              <CardDescription>
-                Customer details, schedule and service location.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent>
-
-              <div className="flex items-center gap-3">
-
-                <Avatar className="h-12 w-12 border border-border">
-                  <AvatarFallback className="bg-muted font-semibold text-foreground">
-                    {getInitials(
-                      customer?.name,
-                    )}
-                  </AvatarFallback>
-                </Avatar>
-
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-foreground">
-                    {customer?.name ||
-                      "Customer"}
-                  </p>
-
-                  <p className="truncate text-sm text-muted-foreground">
-                    {customer?.email ||
-                      "-"}
-                  </p>
-
-                  <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                    <Phone className="h-3.5 w-3.5" />
-                    {customer?.phone ||
-                      "-"}
-                  </div>
-                </div>
-
-              </div>
-
-              <Separator className="my-5" />
-
-              <div className="grid gap-3 sm:grid-cols-2">
-
-                <MetricCard
-                  label="Scheduled"
-                  value={formatDate(
-                    job.scheduledAt,
-                  )}
-                  icon={
-                    <Clock3 className="h-5 w-5" />
-                  }
-                />
-
-                <MetricCard
-                  label="Estimated price"
-                  value={
-                    job.bookingId
-                      ?.estimatedPrice !=
-                    null
-                      ? `₹${job.bookingId.estimatedPrice}`
-                      : "-"
-                  }
-                  icon={
-                    <Wallet className="h-5 w-5" />
-                  }
-                />
-
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-border bg-muted/20 p-4">
-
-                <div className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
-
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Service address
-                    </p>
-
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {address?.addressLine ||
-                        "Address not available"}
-                    </p>
-
-                    <p className="text-sm text-muted-foreground">
-                      {address?.city ||
-                        "-"}
-                      {address?.pincode
-                        ? `, ${address.pincode}`
-                        : ""}
-                    </p>
-                  </div>
-                </div>
-
-              </div>
-
-            </CardContent>
-          </Card>
-
-          {/* Timeline */}
-          <Card className="rounded-3xl border-border bg-card shadow-sm">
-
-            <CardHeader>
-              <CardTitle>
-                Job timeline
-              </CardTitle>
-
-              <CardDescription>
-                Track the execution from assignment to completion.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent>
-
-              <div className="space-y-4">
-
-                <TimelineItem
-                  title="Accepted"
-                  value={
-                    job.acceptedAt
-                      ? "Technician accepted the job"
-                      : null
-                  }
-                  time={
-                    job.acceptedAt
-                  }
-                  active={
-                    !!job.acceptedAt
-                  }
-                />
-
-                <TimelineItem
-                  title="Arrived"
-                  value={
-                    job.arrivedAt
-                      ? "Reached customer location"
-                      : null
-                  }
-                  time={
-                    job.arrivedAt
-                  }
-                  active={
-                    !!job.arrivedAt
-                  }
-                />
-
-                <TimelineItem
-                  title="Customer OTP verified"
-                  value={
-                    job.customerOtpVerifiedAt
-                      ? "OTP verified successfully"
-                      : null
-                  }
-                  time={
-                    job.customerOtpVerifiedAt
-                  }
-                  active={
-                    !!job.customerOtpVerifiedAt
-                  }
-                />
-
-                <TimelineItem
-                  title="Service started"
-                  value={
-                    job.startTime
-                      ? "Work started"
-                      : null
-                  }
-                  time={
-                    job.startTime
-                  }
-                  active={
-                    !!job.startTime
-                  }
-                />
-
-                <TimelineItem
-                  title="Proof submitted"
-                  value={
-                    job.proofSubmittedAt
-                      ? "Proof uploaded"
-                      : null
-                  }
-                  time={
-                    job.proofSubmittedAt
-                  }
-                  active={
-                    !!job.proofSubmittedAt
-                  }
-                />
-
-                <TimelineItem
-                  title="Completed"
-                  value={
-                    job.endTime
-                      ? "Job completed"
-                      : null
-                  }
-                  time={
-                    job.endTime
-                  }
-                  active={
-                    job.status ===
-                    "completed"
-                  }
-                />
-
-              </div>
-
-            </CardContent>
-          </Card>
-
-          {/* Parts */}
-          <JobPartsUsed
-            jobId={job._id}
-            partsUsed={
-              job.partsUsed ||
-              []
-            }
-            jobStatus={
-              job.status
-            }
-            onUpdated={async () => {
-              await refetch();
+              setProofFiles(files);
             }}
           />
-
-          {/* Proof */}
-          <Card className="rounded-3xl border-border bg-card shadow-sm">
-
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle>
-                    Proof of service
-                  </CardTitle>
-
-                  <CardDescription>
-                    Upload photos and add a service note.
-                  </CardDescription>
-                </div>
-
-                <Badge className="rounded-full border-border bg-muted text-muted-foreground">
-                  {proofFiles.length} selected
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-
-              <Textarea
-                value={proofNote}
-                onChange={(event) =>
-                  setProofNote(
-                    event.target.value,
-                  )
+          <p className="mt-2 text-xs leading-6 text-muted-foreground">
+            {proofFiles.length
+              ? `${proofFiles.length} ${proofFiles.length === 1 ? "photo" : "photos"} selected.`
+              : "Choose at least one clear photo. Photos are uploaded only when you submit."}
+          </p>
+        </div>
+        <div>
+          <label
+            htmlFor="service-proof-note"
+            className="mb-2 block text-sm font-semibold"
+          >
+            Proof note{" "}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </label>
+          <Textarea
+            id="service-proof-note"
+            value={proofNote}
+            onChange={(event) => setProofNote(event.target.value)}
+            rows={3}
+            maxLength={2000}
+            disabled={mutating}
+            placeholder="Describe the work shown in your photos"
+          />
+        </div>
+        <Button
+          type="submit"
+          variant={primary ? "default" : "outline"}
+          className="min-h-12 w-full sm:w-auto"
+          disabled={mutating || !proofFiles.length}
+        >
+          {busy === "proof" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Camera className="size-4" />
+          )}
+          {busy === "proof"
+            ? "Uploading & saving proof…"
+            : "Upload service proof"}
+        </Button>
+      </form>
+    );
+  }
+  const statusTone =
+    job.status === "completed"
+      ? "border-brand-teal/25 bg-secondary text-secondary-foreground"
+      : ["cancelled", "on_hold"].includes(job.status) ||
+          (!workflow.active && job.status !== "completed")
+        ? "border-primary/25 bg-primary/8 text-primary"
+        : "border-border bg-muted text-foreground";
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-center justify-between gap-3">
+        <BackLink />
+        <Button
+          variant="outline"
+          className="min-h-11 shrink-0"
+          onClick={() => void refresh()}
+          disabled={refreshing || mutating}
+          aria-label="Refresh job details"
+        >
+          <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+          <span className="hidden sm:inline">Refresh</span>
+        </Button>
+      </div>
+      <header className="flex min-w-0 flex-col justify-between gap-5 sm:flex-row sm:items-start">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+            Your service workspace
+          </p>
+          <h1 className="mt-2 break-words font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            {booking?.serviceType || "Assigned service"}
+          </h1>
+          {booking?.subService && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {booking.subService}
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <span className="break-all">Job {job._id}</span>
+            <button
+              type="button"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-1 font-semibold hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+              aria-label="Copy job reference"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(job._id);
+                  toast.success("Job reference copied.");
+                } catch {
+                  toast.error(
+                    "Copy is unavailable. Select the job reference to copy it.",
+                  );
                 }
-                placeholder="Add a short note about the completed work..."
-                className="min-h-24 rounded-2xl"
-              />
-
-              <Input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={(event) =>
-                  setProofFiles(
-                    Array.from(
-                      event.target
-                        .files ||
-                        [],
-                    ),
-                  )
-                }
-                className="rounded-2xl"
-              />
-
-              <Button
-                className="h-11 rounded-2xl bg-cyan-600 text-white hover:bg-cyan-700"
-                onClick={
-                  handleUploadProof
-                }
-                disabled={
-                  proofFiles.length ===
-                    0 ||
-                  uploadProof.isPending
-                }
-              >
-                {uploadProof.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <FileImage className="mr-2 h-4 w-4" />
-                    Upload proof
-                  </>
+              }}
+            >
+              <ClipboardCopy className="size-3.5" />
+              Copy
+            </button>
+          </div>
+        </div>
+        <span
+          className={cn(
+            "inline-flex w-fit shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold",
+            statusTone,
+          )}
+        >
+          <span className="size-2 rounded-full bg-current" />
+          {workflow.statusLabel}
+        </span>
+      </header>
+      {refreshFailed && (
+        <div
+          role="alert"
+          className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6"
+        >
+          The latest refresh failed. These are the last confirmed details;
+          refresh successfully before updating this job.
+        </div>
+      )}
+      <nav
+        aria-label="Job progress"
+        className="rounded-2xl border border-border bg-card p-4 sm:p-5"
+      >
+        <ol className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
+          {workflow.stages.map((stage, index) => (
+            <li
+              key={stage.key}
+              aria-current={stage.state === "current" ? "step" : undefined}
+              className="flex min-w-0 gap-3 sm:block"
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold sm:mb-3",
+                  stage.state === "completed"
+                    ? "border-brand-teal/20 bg-secondary text-secondary-foreground"
+                    : stage.state === "current"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : stage.state === "blocked" ||
+                          stage.state === "exceptional"
+                        ? "border-primary/20 bg-primary/5 text-primary"
+                        : "border-border text-muted-foreground",
                 )}
-              </Button>
-
+              >
+                {stage.state === "completed" ? (
+                  <Check className="size-4" />
+                ) : stage.state === "blocked" ? (
+                  <LockKeyhole className="size-4" />
+                ) : stage.state === "exceptional" ? (
+                  <TriangleAlert className="size-4" />
+                ) : (
+                  index + 1
+                )}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{stage.label}</p>
+                <p className="mt-1 hidden text-[11px] leading-5 text-muted-foreground sm:block">
+                  {stage.detail}
+                </p>
+                <span className="sr-only">{stage.state}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </nav>
+      <Card
+        className={cn(
+          "rounded-2xl border border-border shadow-none",
+          action ? "border-primary/20" : "bg-muted/20",
+        )}
+      >
+        <CardContent className="py-2 sm:py-3">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary">
+              {job.status === "completed" ? (
+                <BadgeCheck className="size-5" />
+              ) : action ? (
+                <ArrowRight className="size-5" />
+              ) : (
+                <LockKeyhole className="size-5" />
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {action
+                  ? "Next step"
+                  : job.status === "completed"
+                    ? "Service complete"
+                    : "Workflow update"}
+              </p>
+              <h2 className="mt-1 text-lg font-semibold">
+                {action?.label ||
+                  (job.status === "completed" && invoiceId
+                    ? "The service workflow is complete"
+                    : "No action is currently available")}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+                {action?.description ||
+                  workflow.blockedReason ||
+                  "The saved job is completed. Its service history and recorded billing information remain available below."}
+              </p>
+              {job.status === "on_hold" && (
+                <p className="mt-2 text-xs leading-6 text-primary">
+                  The job is on hold. Only mark it complete once the agreed work
+                  is finished.
+                </p>
+              )}
+              {action?.key === "proof"
+                ? proofForm(true)
+                : action && (
+                    <form
+                      className="mt-5 flex flex-col items-start gap-4 sm:flex-row sm:items-end"
+                      onSubmit={submitPrimary}
+                    >
+                      {action.key === "start" && (
+                        <div className="w-full sm:max-w-xs">
+                          <label
+                            htmlFor="customer-job-otp"
+                            className="mb-2 block text-sm font-semibold"
+                          >
+                            Customer OTP
+                          </label>
+                          <Input
+                            id="customer-job-otp"
+                            name="otp"
+                            autoComplete="one-time-code"
+                            inputMode="numeric"
+                            minLength={4}
+                            maxLength={12}
+                            value={otp}
+                            onChange={(event) => setOtp(event.target.value)}
+                            placeholder="Enter the customer's OTP"
+                            className="h-12"
+                            disabled={mutating}
+                            required
+                          />
+                        </div>
+                      )}
+                      <Button
+                        type="submit"
+                        className="min-h-12 w-full whitespace-normal text-left sm:w-auto"
+                        disabled={
+                          mutating ||
+                          (action.key === "start" && otp.trim().length < 4)
+                        }
+                      >
+                        {mutating ? (
+                          <Loader2 className="size-4 shrink-0 animate-spin" />
+                        ) : action.key === "start" ? (
+                          <ShieldCheck className="size-4 shrink-0" />
+                        ) : (
+                          <ArrowRight className="size-4 shrink-0" />
+                        )}
+                        {mutating ? action.busyLabel : action.label}
+                      </Button>
+                    </form>
+                  )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      {job.status === "enroute" && (
+        <ProJourney
+          jobId={job._id}
+          status={job.status}
+          journey={data.journey}
+        />
+      )}
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
+        <div className="min-w-0 space-y-6">
+          <Card className="rounded-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="size-5 text-primary" />
+                Service destination
+              </CardTitle>
+              <CardDescription>
+                Navigate to the confirmed booking address.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ServiceAddressPreview address={booking?.address} navigate />
             </CardContent>
           </Card>
-
-          {/* Notes */}
-          <Card className="rounded-3xl border-border bg-muted/20 shadow-none">
-
+          <Card className="rounded-2xl">
             <CardHeader>
-              <CardTitle>
-                Service notes
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="size-5 text-primary" />
+                Booking details
               </CardTitle>
             </CardHeader>
-
             <CardContent>
-              <p className="text-sm leading-6 text-muted-foreground">
-                {job.notes ||
-                  "No notes available for this job."}
+              <dl className="grid gap-5 sm:grid-cols-2">
+                <DetailRow label="Booking reference" value={booking?._id} />
+                <DetailRow
+                  label="Scheduled visit"
+                  value={schedule || "Schedule not recorded"}
+                />
+                <DetailRow
+                  label="Booking status"
+                  value={booking?.status?.replaceAll("_", " ")}
+                />
+                {booking?.timeWindow && (
+                  <DetailRow
+                    label="Preferred time window"
+                    value={[
+                      dateLabel(booking.timeWindow.from),
+                      dateLabel(booking.timeWindow.to),
+                    ]
+                      .filter(Boolean)
+                      .join(" — ")}
+                  />
+                )}
+              </dl>
+              {(booking?.notes || job.notes) && (
+                <div className="mt-6 space-y-4 border-t border-border pt-5">
+                  {booking?.notes && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-muted-foreground">
+                        Customer / booking instructions
+                      </h3>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7">
+                        {booking.notes}
+                      </p>
+                    </div>
+                  )}
+                  {job.notes && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-muted-foreground">
+                        Job notes
+                      </h3>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7">
+                        {job.notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Camera className="size-5 text-primary" />
+                Service proof
+                <span className="ml-auto text-xs font-normal text-muted-foreground">
+                  {workflow.proofCount} saved
+                </span>
+              </CardTitle>
+              <CardDescription>
+                {job.proofRequired === true
+                  ? "Proof is required before this job can be completed."
+                  : job.proofRequired === false
+                    ? "Proof is optional for this job."
+                    : "Refresh the job to confirm its proof requirement."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {proofs.length ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {proofs.map((item) => {
+                    const url = safeProofUrl(item.url),
+                      preview = safeProofUrl(item.thumbnailUrl) || url;
+                    return (
+                      <article
+                        key={item._id}
+                        className="overflow-hidden rounded-xl border border-border"
+                      >
+                        {url && (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block focus-visible:outline-2 focus-visible:outline-ring"
+                          >
+                            {preview && item.type !== "video" ? (
+                              <Image
+                                src={preview}
+                                alt="Saved service proof"
+                                width={480}
+                                height={300}
+                                unoptimized
+                                className="h-40 w-full object-cover"
+                              />
+                            ) : (
+                              <span className="flex min-h-24 items-center justify-center text-sm font-semibold">
+                                Open saved proof
+                                <ArrowRight className="ml-2 size-4" />
+                              </span>
+                            )}
+                          </a>
+                        )}
+                        <div className="p-3">
+                          <p className="text-xs font-semibold">
+                            {item.type
+                              ? item.type.replaceAll("_", " ")
+                              : "Saved proof"}
+                          </p>
+                          {dateLabel(item.createdAt) && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              {dateLabel(item.createdAt)}
+                            </p>
+                          )}
+                          {item.metadata?.note && (
+                            <p className="mt-2 whitespace-pre-wrap text-xs leading-6">
+                              {item.metadata.note}
+                            </p>
+                          )}
+                          {!url && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Preview unavailable. The proof record remains
+                              saved.
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-border p-5 text-sm leading-7 text-muted-foreground">
+                  {workflow.proofCount
+                    ? `${workflow.proofCount} proof records are saved; previews are unavailable. Refresh to try loading them again.`
+                    : "No service proof has been saved yet."}
+                </p>
+              )}
+              {workflow.canUploadProof && action?.key !== "proof" && (
+                <details className="mt-5 rounded-xl border border-border p-4">
+                  <summary className="cursor-pointer text-sm font-semibold">
+                    Add service photos
+                  </summary>
+                  {proofForm()}
+                </details>
+              )}
+            </CardContent>
+          </Card>
+          <JobPartsUsed
+            key={`${job._id}:${JSON.stringify(job.partsUsed || [])}`}
+            jobId={job._id}
+            partsUsed={job.partsUsed || []}
+            jobStatus={job.status}
+            readOnly={!workflow.canManageParts || mutating}
+            actionGate={gate}
+            onBusyChange={(value) => setBusy(value ? "parts" : null)}
+          />
+        </div>
+        <aside className="min-w-0 space-y-6">
+          <Card className="rounded-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserRound className="size-5 text-primary" />
+                Customer
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="break-words text-base font-semibold">
+                {customer?.name || "Customer details unavailable"}
+              </p>
+              {customer?.phone && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {customer.phone}
+                </p>
+              )}
+              {phone && (
+                <a
+                  href={`tel:${phone}`}
+                  className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold hover:bg-muted"
+                >
+                  <Phone className="size-4" />
+                  Call customer
+                </a>
+              )}
+              {session?.user?.id && session.user.role === "technician" && (
+                <div className="mt-3 [&_button]:min-h-11 [&_button]:w-full">
+                  <JobChatPanel
+                    jobId={job._id}
+                    currentUserId={session.user.id}
+                    currentUserRole="technician"
+                    currentUserName={session.user.name || undefined}
+                    triggerLabel="Open job chat"
+                  />
+                </div>
+              )}
+              <p className="mt-4 text-xs leading-6 text-muted-foreground">
+                Contact and messages are available only through your authorized
+                job.
               </p>
             </CardContent>
           </Card>
-
-        </div>
-
-        {/* Side */}
-        <div className="space-y-6">
-
-          {/* Job metrics */}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-
-            <MetricCard
-              label="Payment"
-              value={
-                job.paymentStatus ||
-                "unbilled"
-              }
-              icon={
-                <Wallet className="h-5 w-5" />
-              }
-              note="Current payment state"
-            />
-
-            <MetricCard
-              label="OTP"
-              value={
-                job.otp
-                  ? "Available"
-                  : "Missing"
-              }
-              icon={
-                <TimerReset className="h-5 w-5" />
-              }
-              note={
-                formatCountdown(
-                  job.otpExpiresAt,
-                )
-              }
-            />
-
-            <MetricCard
-              label="Proof files"
-              value={
-                (
-                  job.proofIds ||
-                  []
-                ).length
-              }
-              icon={
-                <Camera className="h-5 w-5" />
-              }
-              note="Uploaded evidence"
-            />
-
-            <MetricCard
-              label="Chat"
-              value={
-                job.chatUnreadCount ||
-                0
-              }
-              icon={
-                <MessageSquare className="h-5 w-5" />
-              }
-              note="Unread messages"
-            />
-
-          </div>
-
-          {/* OTP */}
-          <Card
-            className={cn(
-              "rounded-3xl shadow-sm",
-              canStart
-                ? "border-emerald-500/30 bg-emerald-500/5"
-                : "border-border bg-card",
-            )}
-          >
+          <Card className="rounded-2xl">
             <CardHeader>
-              <CardTitle>
-                Customer verification
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="size-5 text-primary" />
+                Billing record
               </CardTitle>
-
-              <CardDescription>
-                Customer OTP is required before starting the service.
-              </CardDescription>
             </CardHeader>
-
-            <CardContent className="space-y-4">
-
-              <div className="rounded-2xl border border-border bg-background p-4">
-
-                <div className="flex items-center justify-between gap-3">
-
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      OTP status
-                    </p>
-
-                    <p className="mt-1 font-semibold text-foreground">
-                      {job.otp
-                        ? "Available"
-                        : "Missing"}
-                    </p>
-                  </div>
-
-                  {job.otp && (
-                    <Badge className="rounded-full border-border bg-muted text-muted-foreground">
-                      {formatCountdown(
-                        job.otpExpiresAt,
-                      )}
-                    </Badge>
-                  )}
-
-                </div>
-
-              </div>
-
-              <Input
-                value={otp}
-                onChange={(event) =>
-                  setOtp(
-                    event.target.value,
-                  )
-                }
-                placeholder="Enter customer OTP"
-                inputMode="numeric"
-                maxLength={6}
-                className="h-11 rounded-2xl"
-                disabled={
-                  !canStart
-                }
-              />
-
-              <Button
-                className="h-11 w-full rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={
-                  handleStart
-                }
-                disabled={
-                  !canStart ||
-                  startJob.isPending
-                }
-              >
-                {startJob.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  <>
-                    <BadgeCheck className="mr-2 h-4 w-4" />
-                    Verify OTP & start
-                  </>
-                )}
-              </Button>
-
-            </CardContent>
-          </Card>
-
-          {/* Chat */}
-          <Card className="rounded-3xl border-border bg-card shadow-sm">
-
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-
-                <div>
-                  <CardTitle>
-                    Customer chat
-                  </CardTitle>
-
-                  <CardDescription>
-                    Chat related to this job.
-                  </CardDescription>
-                </div>
-
-                <Badge className="rounded-full border-border bg-muted text-muted-foreground">
-                  {job.chatUnreadCount ||
-                    0}{" "}
-                  unread
-                </Badge>
-
-              </div>
-            </CardHeader>
-
             <CardContent>
-              <JobChatPanel
-                jobId={job._id}
-                currentUserId={
-                  session.user.id
-                }
-                currentUserRole={
-                  session.user.role
-                }
-                currentUserName={
-                  session.user.name
-                }
-                triggerLabel="Open customer chat"
-              />
+              <dl className="space-y-5">
+                <DetailRow
+                  label={
+                    money(booking?.estimatedPrice)
+                      ? "Estimated service price"
+                      : "Booked service price"
+                  }
+                  value={bookedPrice}
+                />
+                <DetailRow
+                  label="Payment status"
+                  value={job.paymentStatus?.replaceAll("_", " ")}
+                />
+                <DetailRow
+                  label="Invoice reference"
+                  value={
+                    (typeof job.invoiceId === "object" &&
+                      job.invoiceId?.invoiceNumber) ||
+                    invoiceId
+                  }
+                />
+                <DetailRow
+                  label="Payment recorded"
+                  value={dateLabel(job.paymentReceivedAt)}
+                />
+                <DetailRow
+                  label="Recorded payment method"
+                  value={job.paymentMethod}
+                />
+              </dl>
+              {!bookedPrice && !job.paymentStatus && !invoiceId && (
+                <p className="text-sm leading-7 text-muted-foreground">
+                  No billing details are recorded in this job yet.
+                </p>
+              )}
+              <p className="mt-5 border-t border-border pt-4 text-xs leading-6 text-muted-foreground">
+                The invoice is generated through the existing completion
+                workflow. Recorded parts are included by the billing service.
+              </p>
             </CardContent>
           </Card>
-
-        </div>
-
+          {invoiceId && job.status === "completed" && <FinalBillPanel invoiceId={invoiceId}/>}
+          {booking?._id && <CancellationPanel bookingId={booking._id}/>}
+          {history.length > 0 && (
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock3 className="size-5 text-primary" />
+                  Recorded history
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="space-y-5">
+                  {history.map(([key, label, value]) => (
+                    <li key={key} className="flex gap-3">
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand-teal-dark" />
+                      <div>
+                        <p className="text-xs font-semibold">{label}</p>
+                        <time
+                          dateTime={value}
+                          className="mt-1 block text-[11px] leading-5 text-muted-foreground"
+                        >
+                          {dateLabel(value)}
+                        </time>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+          )}
+        </aside>
       </div>
-
-      {/* Completion footer */}
-      {job.status ===
-        "completed" && (
-        <Card className="rounded-3xl border-emerald-500/20 bg-emerald-500/5">
-          <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-
-            <div className="flex items-start gap-3">
-
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-
-              <div>
-                <p className="font-semibold text-foreground">
-                  Job completed
-                </p>
-
-                <p className="mt-1 text-sm text-muted-foreground">
-                  The service has been completed and the workflow is closed.
-                </p>
-              </div>
-
-            </div>
-
-            <Button
-              variant="outline"
-              className="rounded-2xl"
-              onClick={() =>
-                router.push(
-                  "/technician",
-                )
-              }
-            >
-              Back to my jobs
-            </Button>
-
-          </CardContent>
-        </Card>
-      )}
-
     </div>
   );
 }

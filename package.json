@@ -6,8 +6,24 @@
   "scripts": {
     "dev": "node server.js",
     "build": "next build",
-    "start": "NODE_ENV=production node server.js",
-    "lint": "eslint"
+    "start": "node scripts/start-production.mjs",
+    "lint": "eslint",
+    "test:public-booking": "node --test scripts/public-booking.test.mjs",
+    "test:customer-security": "node --test scripts/customer-security.test.mjs",
+    "catalog:seed": "node scripts/seed-marketplace.mjs",
+    "images:cleanup": "node scripts/cleanup-provider-images.mjs",
+    "test:marketplace": "node --test scripts/marketplace.test.mjs",
+    "admin:provision": "node scripts/provision-admin.mjs",
+    "moderation:migrate": "node scripts/migrate-moderation.mjs",
+    "moderation:retry-notifications": "node scripts/retry-moderation-notifications.mjs",
+    "test:admin": "node --test scripts/admin-moderation.test.mjs",
+    "test:maps-arrival": "node --test scripts/maps-arrival.test.mjs",
+    "arrival:retry-notifications": "node scripts/retry-arrival-notifications.mjs",
+    "test:location": "node --test scripts/customer-location.test.mjs scripts/discovery-location.test.mjs scripts/reverse-geocoding.test.mjs scripts/coverage-policy.test.mjs scripts/discovery-persistence.test.mjs scripts/discovery-query.test.mjs",
+    "test:pro-workflow": "node --test scripts/technician-job-api.test.mjs scripts/technician-workflow.test.mjs scripts/pro-tracking.test.mjs scripts/notifications-badge.test.mjs",
+    "test:finance": "node --test scripts/finance-ledger.test.mjs scripts/finance-security.test.mjs",
+    "finance:migrate": "node scripts/migrate-finance.mjs",
+    "finance:maintenance": "node scripts/finance-maintenance.mjs"
   },
   "type": "module",
   "dependencies": {

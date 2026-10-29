@@ -1,4 +1,5 @@
-import { requireRole } from "@/lib/auth";
+import { requireCurrentUser } from "@/lib/auth";
+import Customer from "@/models/customer";
 import { connectToDb } from "@/lib/db";
 import Invoice from "@/models/invoice";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -7,15 +8,20 @@ import InvoicePdf from "@/components/invoice/InvoicePdf";
 import "@/models/job";
 import "@/models/booking";
 import "@/models/customer";
+import { objectIdSchema } from "@/lib/pagination";
+import { apiFailure } from "@/lib/api-response";
 
 
 export async function GET( _: Request, { params }: { params: Promise<{ id: string }> }){
     try {
-        await requireRole(["admin", "manager","customer"]);
+        const user = await requireCurrentUser();
+        if (!["admin", "dispatcher", "manager", "customer"].includes(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         await connectToDb();
-        const {id} = await params;
+        const id = objectIdSchema.parse((await params).id);
 
-        const invoice = await Invoice.findById(id)
+        const customerProfile = user.role === "customer" ? await Customer.findOne({ userId: user._id }).select("_id").lean() : null;
+        if (user.role === "customer" && !customerProfile) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const invoice = await Invoice.findOne({ _id: id, ...(user.role === "customer" ? { customerId: customerProfile!._id } : {}) })
                         .populate("jobId")
                         .populate("bookingId")
                         .populate("customerId")
@@ -70,13 +76,12 @@ export async function GET( _: Request, { params }: { params: Promise<{ id: strin
     return new Response(new Uint8Array(pdfBuffer), {
       headers: {
         "Content-Type": "application/pdf",
+        "Cache-Control": "private, no-store",
         "Content-Disposition": `attachment; filename="${String(invoice.invoiceNumber)}.pdf"`,
       },
     });
 
     } catch (error) {
-        return NextResponse.json({
-            error: (error as Error).message || "Server error"
-        },{status:500});
+        return apiFailure(error);
     }
 }

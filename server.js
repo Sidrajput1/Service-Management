@@ -1,91 +1,61 @@
-import http from 'http';
-import next from 'next';
+import http from "http";
+import next from "next";
 
-import {Server} from 'socket.io';
+import { Server } from "socket.io";
+import { installSocketSecurity } from "./lib/socket-server.mjs";
 
-const dev = process.env.NODE_ENV !== 'production';
+const dev = process.env.NODE_ENV !== "production";
 
-const app = next({dev});
+const app = next({ dev, ...(dev ? { webpack: true } : {}) });
 
 const handle = app.getRequestHandler();
 
-
 app.prepare().then(() => {
-    const server = http.createServer((req,res) =>  handle(req,res));
+  const server = http.createServer((req, res) => handle(req, res));
 
-    const io = new Server(server,{
-        cors:{
-            origin:process.env.NEXT_PUBLIC_APP_URL || "*",
-            methods:["GET","POST"]
-        }
-    });
+  const io = new Server(server, {
+    allowRequest: (request, callback) => {
+      const expected = new URL(
+        process.env.NEXT_PUBLIC_APP_URL ||
+          process.env.NEXTAUTH_URL ||
+          "http://localhost:3000",
+      ).origin;
+      callback(
+        null,
+        !request.headers.origin || request.headers.origin === expected,
+      );
+    },
+    cors: {
+      origin: new URL(
+        process.env.NEXT_PUBLIC_APP_URL ||
+          process.env.NEXTAUTH_URL ||
+          "http://localhost:3000",
+      ).origin,
+      credentials: true,
+      methods: ["GET", "POST"],
+    },
+  });
 
-    global.io = io;
+  global.io = io;
 
-    io.use((socket,nextFn) => {
-        const user = socket.handshake.auth.user;
+  installSocketSecurity(io);
 
-        if(!user || !user.id){
-            return nextFn(new Error("Unauthorized socket connection"));
-        }
+  // const PORT = process.env.PORT || 3000;
+  // server.listen(PORT,(err) => {
+  //     if(err) throw err;
+  //     console.log(`> Server is running on http://localhost:${PORT}`);
+  // });
 
-        socket.data.user = user;
-        return nextFn();
-    });
+  //--------------------------
+  // for production
+  //----------------------------
 
-    io.on("connection",(socket) => {
-         console.log("User connected:", socket.id);
-        const user = socket.data.user;
-        socket.join(`user:${user.id}`);
+  const PORT = Number(process.env.PORT) || 3000;
+  const HOST = process.env.HOST || "0.0.0.0";
 
-        socket.on("conversation:join",({conversationId}) => {
-            if(conversationId) socket.join(`conversation:${conversationId}`);
-        });
+  server.listen(PORT, HOST, (err) => {
+    if (err) throw err;
 
-        socket.on("conversation:leave",({conversationId}) => {
-            if(conversationId) socket.leave(`conversation:${conversationId}`);
-        });
-
-        socket.on("typing:start",({conversationId}) => {
-            if(!conversationId) return;
-            socket.to(`conversation:${conversationId}`).emit("typing:start",{
-                conversationId,
-                userId:user.id,
-                name:user.name || "",
-                role:user.role || "",
-            });
-        });
-
-        socket.on("typing:stop",({conversationId}) => {
-            if(!conversationId) return;
-            socket.to(`conversation:${conversationId}`).emit("typing:stop",{
-                conversationId,
-                userId:user.id,
-            });
-        });
-    });
-
-    
-
-
-    // const PORT = process.env.PORT || 3000;
-    // server.listen(PORT,(err) => {
-    //     if(err) throw err;
-    //     console.log(`> Server is running on http://localhost:${PORT}`);
-    // });
-
-    //--------------------------
-    // for production 
-    //----------------------------
-
-    const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || "0.0.0.0";
-
-server.listen(PORT, HOST, (err) => {
-  if (err) throw err;
-
-  console.log(
-    `> Servizato server running on ${HOST}:${PORT}`,
-  );
-});
+    console.log(`> Servizato server running on ${HOST}:${PORT}`);
+  });
 });

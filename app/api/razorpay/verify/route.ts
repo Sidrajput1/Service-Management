@@ -4,6 +4,11 @@ import { getRazorpayPayment, verifyCheckoutSignature } from "@/lib/razorpay";
 import { finalizeSuccessfulRazorpayPayment } from "@/lib/razorpay-payment";
 import Invoice from "@/models/invoice";
 import { connectToDb } from "@/lib/db";
+import { requireCurrentUser } from "@/lib/auth";
+import Customer from "@/models/customer";
+import Technician from "@/models/technician";
+import Job from "@/models/job";
+import { apiFailure, privateHeaders } from "@/lib/api-response";
 
 
 export const runtime = "nodejs";
@@ -78,6 +83,7 @@ export async function POST(
   request: Request,
 ) {
   try {
+    const user = await requireCurrentUser();
     await connectToDb();
 
     const body =
@@ -134,6 +140,15 @@ export async function POST(
       );
     }
 
+    let allowed = ["admin", "dispatcher"].includes(user.role);
+    if (user.role === "customer") {
+      const customer = await Customer.findOne({ userId: user._id }).select("_id").lean();
+      allowed = Boolean(customer && String(invoice.customerId) === String(customer._id));
+    } else if (user.role === "technician") {
+      const pro = await Technician.findOne({ userId: user._id }).select("_id").lean();
+      allowed = Boolean(pro && await Job.exists({ _id: invoice.jobId, technicianId: pro._id }));
+    }
+    if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403, headers: privateHeaders });
     /*
      * 3. Already paid?
      *
@@ -148,8 +163,8 @@ export async function POST(
       return NextResponse.json({
         ok: true,
         alreadyPaid: true,
-        invoice,
-      });
+        invoice: { _id: invoice._id, status: invoice.status, balanceDue: invoice.balanceDue },
+      }, { headers: privateHeaders });
     }
 
     /*
@@ -298,42 +313,8 @@ export async function POST(
         result.duplicate ||
         false,
 
-      invoice:
-        result.invoice,
-
-      payment:
-        result.payment,
-    });
-  } catch (err: any) {
-    console.error(
-      "Razorpay verify error:",
-      err,
-    );
-
-    if (
-      err?.name ===
-      "ZodError"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            err.errors,
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    return NextResponse.json(
-      {
-        error:
-          err.message ||
-          "Server error",
-      },
-      {
-        status: 500,
-      },
-    );
-  }
+      invoice: { _id: result.invoice._id, status: result.invoice.status, amountPaid: result.invoice.amountPaid, balanceDue: result.invoice.balanceDue },
+      paymentId: result.payment?._id,
+    }, { headers: privateHeaders });
+  } catch (error) { return apiFailure(error); }
 }

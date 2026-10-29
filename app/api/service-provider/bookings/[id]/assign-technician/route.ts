@@ -1,197 +1,131 @@
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { connectToDb } from "@/lib/db";
+import mongoose from "mongoose";
 import { generateSixDigitOtp } from "@/lib/otp";
-import { requireServiceProvider } from "@/lib/service-provider";
+import { requireProvider } from "@/lib/service-provider";
+import { ApiAuthError } from "@/lib/auth";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { canPerformService } from "@/lib/marketplace-policy.mjs";
+import { objectIdSchema } from "@/lib/pagination";
 import Booking from "@/models/booking";
 import Job from "@/models/job";
 import Technician from "@/models/technician";
-import { getServerSession } from "next-auth";
-import { NextResponse } from "next/server";
+import ServiceOffering from "@/models/ServiceOffering";
+import PriceItem from "@/models/PriceItem";
+import { commissionForBooking } from "@/lib/finance-commission";
 
 export const runtime = "nodejs";
-
+const activeStatuses = [
+  "scheduled",
+  "assigned",
+  "enroute",
+  "arrived",
+  "otp_verified",
+  "in_progress",
+  "on_hold",
+];
 export async function POST(
   request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{ id: string }>;
-  },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    await connectToDb();
-
-    const { provider } = await requireServiceProvider(session.user.id);
-
-    const { id } = await params;
-
-    const body = await request.json();
-
-    const technicianId = body.technicianId;
-
-    if (!technicianId) {
-      return NextResponse.json(
-        {
-          error: "Technician is required",
-        },
-        { status: 400 },
-      );
-    }
-
-    const booking = await Booking.findOne({
-      _id: id,
-      serviceProviderId: provider._id,
-    });
-
-    if (!booking) {
-      return NextResponse.json(
-        {
-          error: "Booking not found",
-        },
-        { status: 404 },
-      );
-    }
-
-    if (!["confirmed", "assigned"].includes(booking.status)) {
-      return NextResponse.json(
-        {
-          error: "This booking cannot be assigned",
-        },
-        { status: 400 },
-      );
-    }
-
-    const technician = await Technician.findOne({
-      _id: technicianId,
-      serviceProviderId: provider._id,
-      isActive: true,
-      status: {
-        //actually allow offline assignment only if the provider intentionally assigns them.
-      $nin: [
-        "busy",
-        "on_leave",
-      ],
-    },
-    });
-
-    if (!technician) {
-      return NextResponse.json(
-        {
-          error: "Technician is not available for this provider",
-        },
-        { status: 400 },
-      );
-    }
-
-    /*
-     * Prevent two active jobs being assigned
-     * to the same technician if you don't want
-     * overlapping assignments.
-     */
-    const activeJob = await Job.findOne({
-      technicianId: technician._id,
-
-      status: {
-        $in: [
-          "scheduled",
-          "assigned",
-          "enroute",
-          "arrived",
-          "otp_verified",
-          "in_progress",
-          "on_hold",
-        ],
-      },
-    });
-
-    if (activeJob) {
-      return NextResponse.json(
-        {
-          error: "Technician already has an active job",
-        },
-        { status: 409 },
-      );
-    };
-
-    // implement otp 
-    const otp = generateSixDigitOtp();
-
-    const otpExpiresAt = new Date();
-
-    // Keep the OTP valid until the service day ends.
-// We can later make this configurable.
-otpExpiresAt.setHours(
-  23,
-  59,
-  59,
-  999,
-);
-
-    /*
-     * Create job
-     */
-    const job = await Job.create({
-      bookingId: booking._id,
-
-      serviceProviderId: provider._id,
-
-      technicianId: technician._id,
-
-      assignedBy: provider.ownerId,
-
-      scheduledAt: booking.scheduledAt,
-
-      status: "assigned",
-
-      paymentStatus: "unbilled",
-
-      proofRequired: true,
-
-      otp,
-      otpExpiresAt,
-    });
-
-    booking.technicianId = technician._id;
-    booking.status = "assigned";
-
-    await booking.save();
-
-    /*
-     * Technician becomes busy
-     */
-    technician.status = "busy";
-
-    await technician.save();
-
-    return NextResponse.json({
-      success: true,
-
-      job: {
-        id: job._id,
-        bookingId: job.bookingId,
-        technicianId: job.technicianId,
-        serviceProviderId: job.serviceProviderId,
-        status: job.status,
-      },
-
-      booking: {
-        id: booking._id,
-        status: booking.status,
-      },
-    });
-  } catch (error: any) {
-    console.error("Assign technician:", error);
-
-    return NextResponse.json(
-      {
-        error: error.message || "Unable to assign technician",
-      },
-      { status: 500 },
+    const { provider } = await requireProvider();
+    const id = objectIdSchema.parse((await params).id);
+    const technicianId = objectIdSchema.parse(
+      (await request.json()).technicianId,
     );
+    const session = await mongoose.startSession();
+    try {
+      const result = await session.withTransaction(async () => {
+        const booking = await Booking.findOne({
+          _id: id,
+          serviceProviderId: provider._id,
+        }).select("+commissionSnapshot").session(session);
+        if (!booking) throw new ApiAuthError("Booking not found", 404);
+        if (!["confirmed", "assigned"].includes(booking.status))
+          throw new ApiAuthError("This booking cannot be assigned", 409);
+        if (
+          await Job.exists({
+            bookingId: booking._id,
+            status: { $in: activeStatuses },
+          }).session(session)
+        )
+          throw new ApiAuthError("This booking already has an active job", 409);
+        const pro = await Technician.findOne({
+          _id: technicianId,
+          serviceProviderId: provider._id,
+          isActive: true,
+          status: { $nin: ["busy", "on_leave"] },
+        }).session(session);
+        if (!pro)
+          throw new ApiAuthError("Pro is not available for this business", 409);
+        if (
+          await Job.exists({
+            technicianId: pro._id,
+            status: { $in: activeStatuses },
+          }).session(session)
+        )
+          throw new ApiAuthError("Pro already has an active job", 409);
+        let required = booking.requiredSkillKeys || [];
+        if (!required.length) {
+          const offering = await ServiceOffering.findById(
+            booking.serviceOfferingId,
+          )
+            .select("priceItemId")
+            .session(session);
+          const item = offering
+            ? await PriceItem.findById(offering.priceItemId)
+                .select("skillKeys")
+                .session(session)
+            : null;
+          required = item?.skillKeys || [];
+        }
+        if (!canPerformService(pro.skillKeys, required))
+          throw new ApiAuthError(
+            "Select a Pro with a catalog skill required for this service",
+            400,
+          );
+        const otpExpiresAt = new Date(
+          Math.max(Date.now(), booking.scheduledAt?.getTime() || 0),
+        );
+        otpExpiresAt.setHours(23, 59, 59, 999);
+        if (!booking.commissionSnapshot && booking.serviceOfferingId) booking.commissionSnapshot = await commissionForBooking(provider._id, booking.serviceOfferingId, session);
+        const [job] = await Job.create(
+          [
+            {
+              bookingId: booking._id,
+              serviceProviderId: provider._id,
+              technicianId: pro._id,
+              assignedBy: provider.ownerId,
+              scheduledAt: booking.scheduledAt,
+              status: "assigned",
+              paymentStatus: "unbilled",
+              proofRequired: true,
+              otp: generateSixDigitOtp(),
+              otpExpiresAt,
+            },
+          ],
+          { session },
+        );
+        booking.technicianId = pro._id;
+        booking.status = "assigned";
+        await booking.save({ session });
+        pro.status = "busy";
+        await pro.save({ session });
+        return {
+          job: {
+            id: job._id,
+            bookingId: job.bookingId,
+            technicianId: job.technicianId,
+            serviceProviderId: job.serviceProviderId,
+            status: job.status,
+          },
+          booking: { id: booking._id, status: booking.status },
+        };
+      });
+      return privateJson({ success: true, ...result });
+    } finally {
+      await session.endSession();
+    }
+  } catch (error) {
+    return apiFailure(error);
   }
 }

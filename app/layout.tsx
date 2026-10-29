@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   title: "Servizato",
   description: "Explore the Servizato marketplace through customer, service provider, and technician accounts",
    icons: {
-    icon: "/servizato.svg",
+    icon: "/servizato-icon.png",
   },
 };
 

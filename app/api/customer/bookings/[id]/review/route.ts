@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { z } from "zod";
 
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-options";
 
 import { connectToDb } from "@/lib/db";
 
@@ -19,6 +19,7 @@ import "@/models/ServiceProvider";
 import { notifyReviewSubmitted } from "@/lib/notify-events";
 import ServiceProvider from "@/models/ServiceProvider";
 import Technician from "@/models/technician";
+import { refreshProviderRating } from "@/lib/provider-ratings";
 
 const ReviewSchema = z.object({
   providerRating: z.number().int().min(1).max(5),
@@ -246,49 +247,31 @@ export async function POST(
 
       status: "published",
     });
+    await refreshProviderRating(String(job.serviceProviderId));
 
-    const technician =
-  await Technician.findById(
-    job.technicianId,
-  ).lean();
+    const technician = await Technician.findById(job.technicianId).lean();
 
-const provider =
-  await ServiceProvider.findById(
-    job.serviceProviderId,
-  )
-    .select("ownerId")
-    .lean();
+    const provider = await ServiceProvider.findById(job.serviceProviderId)
+      .select("ownerId")
+      .lean();
 
-await notifyReviewSubmitted({
-  providerUserId:
-    provider?.ownerId
-      ? String(
-          provider.ownerId,
-        )
-      : undefined,
+    await notifyReviewSubmitted({
+      providerUserId: provider?.ownerId ? String(provider.ownerId) : undefined,
 
-  technicianUserId:
-    technician?.userId
-      ? String(
-          technician.userId,
-        )
-      : undefined,
+      technicianUserId: technician?.userId
+        ? String(technician.userId)
+        : undefined,
 
-  reviewId:
-    review._id.toString(),
+      reviewId: review._id.toString(),
 
-  bookingId:
-    booking._id.toString(),
+      bookingId: booking._id.toString(),
 
-  jobId:
-    job._id.toString(),
+      jobId: job._id.toString(),
 
-  providerRating:
-    review.providerRating,
+      providerRating: review.providerRating,
 
-  technicianRating:
-    review.technicianRating,
-});
+      technicianRating: review.technicianRating,
+    });
 
     return NextResponse.json(
       {
