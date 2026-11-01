@@ -91,40 +91,4 @@ jobs:
             "$VPS_USER@$VPS_HOST" \
             'whoami && hostname'
 
-      - name: Deploy staging over SSH
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          fingerprint: ${{ secrets.VPS_HOST_FINGERPRINT }}
-          command_timeout: 35m
-          script: |
-            set -eu
-            cd /opt/servizato
-            echo "Fetching staging branch..."
-            git fetch origin +refs/heads/servizato-staging:refs/remotes/origin/servizato-staging
-            git checkout -B servizato-staging origin/servizato-staging
-            echo "Validating Docker configuration..."
-            docker compose --env-file .env.production config --quiet
-            echo "Building application..."
-            docker compose --env-file .env.production build
-            echo "Starting application..."
-            docker compose --env-file .env.production up -d
-            echo "Checking health..."
-            healthy=0
-            for attempt in $(seq 1 24); do
-              if curl -fsS --max-time 5 http://127.0.0.1:3000/api/health > /dev/null; then
-                healthy=1
-                break
-              fi
-              sleep 5
-            done
-            if [ "$healthy" -ne 1 ]; then
-              echo "Application health check failed."
-              docker compose ps
-              exit 1
-            fi
-            docker compose ps
-            git rev-parse --short HEAD
-            echo "Staging deployed successfully."
+      
