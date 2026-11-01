@@ -1,3 +1,4 @@
+
 name: Servizato CI
 
 on:
@@ -5,6 +6,7 @@ on:
     branches:
       - main
       - servizato-staging
+
   push:
     branches:
       - main
@@ -21,6 +23,7 @@ jobs:
   ci:
     name: Validate application
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,94 +47,106 @@ jobs:
   deploy-staging:
     name: Deploy staging to KVM2
     needs: ci
+
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/servizato-staging'
+
     runs-on: ubuntu-latest
     timeout-minutes: 40
+
     concurrency:
       group: servizato-kvm2-deployment
       cancel-in-progress: false
+
     environment:
       name: production
       url: https://servizato.in
 
-  steps:
-    - name: Deploy Servizato staging via SSH
-      shell: bash
-      env:
-        VPS_HOST: ${{ secrets.VPS_HOST }}
-        VPS_USER: ${{ secrets.VPS_USER }}
-        VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-        VPS_HOST_PUBLIC_KEY: ${{ secrets.VPS_HOST_PUBLIC_KEY }}
-        DEPLOY_SHA: ${{ github.sha }}
-      run: |
-        set -euo pipefail
+    steps:
+      - name: Deploy Servizato staging via SSH
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST_PUBLIC_KEY: ${{ secrets.VPS_HOST_PUBLIC_KEY }}
+          DEPLOY_SHA: ${{ github.sha }}
 
-        SSH_DIR="$RUNNER_TEMP/servizato-ssh"
-        mkdir -p "$SSH_DIR"
-        chmod 700 "$SSH_DIR"
+        run: |
+          set -euo pipefail
 
-        printf '%s\n' "$VPS_SSH_KEY" > "$SSH_DIR/id_ed25519"
-        chmod 600 "$SSH_DIR/id_ed25519"
+          SSH_DIR="$RUNNER_TEMP/servizato-ssh"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
 
-        ssh-keygen -y -f "$SSH_DIR/id_ed25519" > /dev/null
+          printf '%s\n' "$VPS_SSH_KEY" > "$SSH_DIR/id_ed25519"
+          chmod 600 "$SSH_DIR/id_ed25519"
 
-        printf '%s %s\n' "$VPS_HOST" "$VPS_HOST_PUBLIC_KEY" \
-          > "$SSH_DIR/known_hosts"
-        chmod 600 "$SSH_DIR/known_hosts"
+          ssh-keygen -y -f "$SSH_DIR/id_ed25519" > /dev/null
 
-        ssh -i "$SSH_DIR/id_ed25519" \
-          -o IdentitiesOnly=yes \
-          -o StrictHostKeyChecking=yes \
-          -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
-          -o HostKeyAlgorithms=ssh-ed25519 \
-          -o BatchMode=yes \
-          "$VPS_USER@$VPS_HOST" \
-          bash -se -- "$DEPLOY_SHA" <<'REMOTE'
-        set -euo pipefail
+          printf '%s %s\n' "$VPS_HOST" "$VPS_HOST_PUBLIC_KEY" \
+            > "$SSH_DIR/known_hosts"
+          chmod 600 "$SSH_DIR/known_hosts"
 
-        DEPLOY_SHA="$1"
-        cd /opt/servizato
+          echo "Connecting to KVM2..."
 
-        echo "Fetching staging..."
-        git fetch origin \
-          +refs/heads/servizato-staging:refs/remotes/origin/servizato-staging
+          ssh -i "$SSH_DIR/id_ed25519" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o HostKeyAlgorithms=ssh-ed25519 \
+            -o BatchMode=yes \
+            "$VPS_USER@$VPS_HOST" \
+            bash -se -- "$DEPLOY_SHA" <<'REMOTE'
+          set -euo pipefail
 
-        git merge-base --is-ancestor \
-          "$DEPLOY_SHA" origin/servizato-staging
+          DEPLOY_SHA="$1"
+          cd /opt/servizato
 
-        git checkout -B servizato-staging "$DEPLOY_SHA"
+          echo "Fetching staging branch..."
+          git fetch origin \
+            +refs/heads/servizato-staging:refs/remotes/origin/servizato-staging
 
-        echo "Validating Compose..."
-        docker compose --env-file .env.production config --quiet
+          echo "Verifying deployment commit..."
+          git merge-base --is-ancestor \
+            "$DEPLOY_SHA" origin/servizato-staging
 
-        echo "Building Servizato..."
-        docker compose --env-file .env.production build
+          echo "Checking out staging commit..."
+          git checkout -B servizato-staging "$DEPLOY_SHA"
 
-        echo "Starting container..."
-        docker compose --env-file .env.production up -d
+          echo "Validating Docker configuration..."
+          docker compose --env-file .env.production config --quiet
 
-        echo "Waiting for health check..."
-        healthy=0
+          echo "Building Servizato..."
+          docker compose --env-file .env.production build
 
-        for attempt in $(seq 1 24); do
-          if curl -fsS --max-time 5 \
-            http://127.0.0.1:3000/api/health > /dev/null; then
-            healthy=1
-            break
+          echo "Starting Servizato..."
+          docker compose --env-file .env.production up -d
+
+          echo "Checking application health..."
+          healthy=0
+
+          for attempt in $(seq 1 24); do
+            if curl -fsS --max-time 5 \
+              http://127.0.0.1:3000/api/health > /dev/null; then
+              healthy=1
+              break
+            fi
+            sleep 5
+          done
+
+          if [ "$healthy" -ne 1 ]; then
+            echo "Application health check failed."
+            docker compose ps
+            exit 1
           fi
-          sleep 5
-        done
 
-        if [ "$healthy" -ne 1 ]; then
-          echo "Health check failed"
+          echo "Docker container status:"
           docker compose ps
-          exit 1
-        fi
 
-        docker compose ps
-        git log -1 --oneline
+          echo "Deployed Git commit:"
+          git log -1 --oneline
 
-        echo "Staging deployment successful!"
-        REMOTE
+          echo "Staging deployment successful!"
+          REMOTE
