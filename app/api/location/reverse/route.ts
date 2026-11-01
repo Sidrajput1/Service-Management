@@ -44,11 +44,18 @@ export async function POST(request: Request) {
   let secure = false;
   try {
     const origin = request.headers.get("origin");
-    const target = new URL(request.url);
-    secure = target.protocol === "https:";
+    // const target = new URL(request.url);
+    // secure = target.protocol === "https:";
+
     const site = request.headers.get("sec-fetch-site");
+    const appUrl = process.env.NEXTAUTH_URL;
+    if (!appUrl) {
+      return json({ error: "Application origin is not configured." }, 503);
+    }
+    const expectedOrigin = new URL(appUrl).origin;
+    secure = expectedOrigin.startsWith("https://");
     // Browser requests only originate in this app. No permissive CORS response.
-    if (origin !== target.origin || (site !== null && site !== "same-origin"))
+    if (origin !== expectedOrigin || (site !== null && site !== "same-origin"))
       return json(
         { error: "Open Servizato to request an address suggestion." },
         403,
