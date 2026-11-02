@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { connectToDb } from "@/lib/db";
 import User from "@/models/user";
 import Otp from "@/models/otp";
+import { deactivatePushSession, newPushSessionId, pushSessionHash } from "@/lib/push-session";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -181,6 +182,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.pushSessionId = newPushSessionId();
         token.mustChangePassword = Boolean(user.mustChangePassword);
         token.credentialVersion = user.credentialVersion || 0;
 
@@ -195,6 +197,8 @@ export const authOptions: NextAuthOptions = {
         return token;
       }
 
+      // Older trusted sessions acquire a private push association on their next refresh.
+      if (token.id && !pushSessionHash(token.pushSessionId)) token.pushSessionId = newPushSessionId();
       try {
         if (
           token.email &&
@@ -241,6 +245,12 @@ export const authOptions: NextAuthOptions = {
       }
 
       return session;
+    },
+  },
+
+  events: {
+    async signOut(message) {
+      if ("token" in message) await deactivatePushSession(message.token);
     },
   },
 

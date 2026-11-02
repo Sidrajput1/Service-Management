@@ -1,5 +1,6 @@
 // models/Notification.ts
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { pushEvents, type PushEvent } from "@/lib/push-policy.mjs";
 
 // export interface INotification extends Document {
 //   toUserId?: mongoose.Types.ObjectId;
@@ -62,6 +63,15 @@ export interface INotification extends Document {
   dedupeKey?: string;
   metadata?: Record<string, any>;
   readAt?: Date;
+  pushEvent?: PushEvent;
+  pushDelivery?: {
+    claimedAt?: Date;
+    finishedAt?: Date;
+    sent?: number;
+    inactive?: number;
+    failed?: number;
+    skipped?: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -131,6 +141,21 @@ const NotificationSchema = new Schema<INotification>(
     dedupeKey: String,
     metadata: Schema.Types.Mixed,
     readAt: Date,
+    pushEvent: { type: String, enum: [...pushEvents], select: false },
+    pushDelivery: {
+      type: new Schema(
+        {
+          claimedAt: Date,
+          finishedAt: Date,
+          sent: Number,
+          inactive: Number,
+          failed: Number,
+          skipped: Number,
+        },
+        { _id: false },
+      ),
+      select: false,
+    },
   },
   { timestamps: true },
 );

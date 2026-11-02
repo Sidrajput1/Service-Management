@@ -192,6 +192,7 @@ export async function staffAssignJob(
         );
         if (recipients.technicianUserId)
           await notifyJobAssigned({
+            notificationKey: `${result.job._id}:${result.job.updatedAt?.toISOString() || "legacy"}`,
             technicianUserId: recipients.technicianUserId,
             customerUserId: recipients.customerUserId || undefined,
             providerUserId: recipients.providerUserId || undefined,

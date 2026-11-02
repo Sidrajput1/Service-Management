@@ -3,7 +3,7 @@ import { ProviderReviewFeedback } from "./ReviewFeedback";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signOut } from "@/lib/push-client";
 import {
   LayoutDashboard,
   Wrench,
@@ -145,7 +145,7 @@ export function ProviderOperationsShell({ children }: { children: ReactNode }) {
               href="/services"
               className="hidden text-xs font-semibold text-muted-foreground sm:block"
             >
-              Customer website
+             
             </Link>
             <ThemeToggle />
           </div>

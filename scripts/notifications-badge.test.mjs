@@ -479,6 +479,7 @@ test("invoice and partial completion-notice retries reuse recipient records with
   };
   const creator = load("lib/notification.ts", {
     "@/models/notification": model,
+    "./push-delivery": { scheduleNotificationPush() {} },
     "./db": { connectToDb: async () => {} },
     "@/models/user": {},
   });

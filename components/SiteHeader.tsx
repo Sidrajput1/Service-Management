@@ -21,7 +21,7 @@ import {
   CustomerNavigation,
   customerLinks,
 } from "@/components/customer/CustomerNavigation";
-import { signOut } from "next-auth/react";
+import { signOut } from "@/lib/push-client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -160,7 +160,7 @@ export function SiteHeader() {
       </a>
       <div className="public-container flex min-h-21 items-center justify-between gap-6">
         <Link href="/" aria-label="Servizato home" className="shrink-0">
-          <BrandLogo priority />
+          <BrandLogo priority className="max-[360px]:w-36" />
         </Link>
         <nav
           aria-label="Main navigation"

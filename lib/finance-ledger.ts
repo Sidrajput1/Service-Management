@@ -762,6 +762,7 @@ export async function notifyBillChanged(invoiceId: string, key: string) {
     ] as const)
       if (recipient)
         await createNotification({
+          pushEvent: "bill_review",
           recipientUserId: String(recipient),
           title: "Bill and payment update",
           message:
@@ -780,6 +781,7 @@ export async function notifyBillChanged(invoiceId: string, key: string) {
       .lean();
     for (const admin of admins)
       await createNotification({
+          pushEvent: "bill_review",
         recipientUserId: String(admin._id),
         title: "Financial record updated",
         message: "A bill or payment record is ready for review.",

@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import ThemeToggler from "./ThemeToggler";
-import { signOut } from "next-auth/react";
+import { signOut } from "@/lib/push-client";
 
 function Topbar({
   role,

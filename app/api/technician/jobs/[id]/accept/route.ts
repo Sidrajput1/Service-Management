@@ -67,6 +67,7 @@ export async function POST(
       bookingId: String(job.bookingId),
     });
     await notifyTechnicianEnroute({
+      notificationKey: `${job._id}:${job.acceptedAt?.toISOString() || "legacy"}`,
       customerUserId: recipients.customerUserId!,
       jobId: job._id.toString(),
       bookingId: String(job.bookingId),

@@ -248,6 +248,7 @@ export async function notifyCancellation(bookingId: string, key: string) {
     ] as const)
       if (id)
         await createNotification({
+          pushEvent: "booking_cancelled",
           recipientUserId: String(id),
           title: "Booking cancelled",
           message:
@@ -267,6 +268,7 @@ export async function notifyCancellation(bookingId: string, key: string) {
       : null;
     if (tech?.userId)
       await createNotification({
+          pushEvent: "booking_cancelled",
         recipientUserId: String(tech.userId),
         title: "Booking cancelled",
         message:

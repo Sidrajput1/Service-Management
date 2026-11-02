@@ -335,6 +335,7 @@ async function fixture() {
   const notification = await load("../lib/notification.ts", {
     ...common,
     "@/models/notification": notifications,
+    "./push-delivery": { scheduleNotificationPush() {} },
   });
   const delivery = await load("../lib/moderation-notifications.ts", {
     ...common,

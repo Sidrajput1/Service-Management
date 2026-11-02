@@ -1,3 +1,4 @@
+import type { PushEvent } from "./push-policy.mjs";
 import { arrivalMessage } from "./arrival-message.mjs";
 import { createNotification } from "./notification";
 
@@ -62,6 +63,8 @@ export async function notifyBookingAccepted(
   },
 ) {
   await createNotification({
+    pushEvent: "booking_accepted",
+    dedupeKey: `booking-accepted:${input.bookingId}:${input.customerUserId}`,
     recipientUserId:
       input.customerUserId,
 
@@ -103,6 +106,7 @@ export async function notifyBookingAccepted(
 //--------------------------------
 export async function notifyJobAssigned(input: {
   technicianUserId: string;
+  notificationKey?: string;
   customerUserId?: string;
   jobId: string;
   bookingId: string;
@@ -110,6 +114,8 @@ export async function notifyJobAssigned(input: {
   providerUserId?: string;
 }) {
   await createNotification({
+    pushEvent: "job_assigned",
+    dedupeKey: `job-assigned:${input.notificationKey || input.jobId}:${input.technicianUserId}`,
     recipientUserId: input.technicianUserId,
     title: "New job assigned",
     message: `You have been assigned a ${input.serviceName || "service"} job`,
@@ -122,6 +128,8 @@ export async function notifyJobAssigned(input: {
 
   if (input.customerUserId) {
     await createNotification({
+    pushEvent: "job_assigned",
+    dedupeKey: `job-assigned:${input.notificationKey || input.jobId}:${input.customerUserId}`,
       recipientUserId: input.customerUserId,
       title: "Technician assigned",
       message: `A technician has been assigned to your booking`,
@@ -135,6 +143,8 @@ export async function notifyJobAssigned(input: {
 
   if (input.providerUserId) {
     await createNotification({
+    pushEvent: "job_assigned",
+    dedupeKey: `job-assigned:${input.notificationKey || input.jobId}:${input.providerUserId}`,
       recipientUserId:
         input.providerUserId,
 
@@ -256,6 +266,7 @@ export async function notifyTechnicianAcceptedJob(
 
 export async function notifyJobStatus(input: {
   dedupeKey?:string;
+  pushEvent?: PushEvent;
   customerUserId?: string;
   jobId: string;
   bookingId: string;
@@ -268,6 +279,7 @@ export async function notifyJobStatus(input: {
   if (!input.customerUserId) return;
 
   await createNotification({
+    pushEvent: input.pushEvent,
     recipientUserId: input.customerUserId,
     title: input.title,
     message: input.message,
@@ -287,6 +299,7 @@ export async function notifyJobStatus(input: {
 export async function notifyTechnicianEnroute(
   input: {
     customerUserId: string;
+    notificationKey?: string;
 
     jobId: string;
 
@@ -296,6 +309,8 @@ export async function notifyTechnicianEnroute(
   },
 ) {
   await notifyJobStatus({
+    pushEvent: "technician_enroute",
+    dedupeKey: `job-enroute:${input.notificationKey || input.jobId}:${input.customerUserId}`,
     customerUserId:
       input.customerUserId,
 
@@ -320,7 +335,7 @@ export async function notifyTechnicianEnroute(
 // Technician arrived
 //
 
-export async function notifyTechnicianArrived(input:{customerUserId:string;jobId:string;bookingId:string;technicianName?:string;dedupeKey?:string}) { await notifyJobStatus({...arrivalMessage(input.jobId,input.bookingId,input.customerUserId),jobId:input.jobId,bookingId:input.bookingId,customerUserId:input.customerUserId,dedupeKey:input.dedupeKey});}
+export async function notifyTechnicianArrived(input:{customerUserId:string;jobId:string;bookingId:string;technicianName?:string;dedupeKey?:string}) { await notifyJobStatus({pushEvent:"technician_arrived",...arrivalMessage(input.jobId,input.bookingId,input.customerUserId),jobId:input.jobId,bookingId:input.bookingId,customerUserId:input.customerUserId,dedupeKey:input.dedupeKey});}
 
 //
 // OTP verified
@@ -376,6 +391,7 @@ export async function notifyServiceCompleted(
     input.customerUserId
   ) {
     await createNotification({
+    pushEvent: "service_completed",
       recipientUserId:
         input.customerUserId,
 
@@ -412,6 +428,7 @@ export async function notifyServiceCompleted(
     input.providerUserId
   ) {
     await createNotification({
+    pushEvent: "service_completed",
       recipientUserId:
         input.providerUserId,
 
@@ -448,6 +465,7 @@ export async function notifyServiceCompleted(
     input.technicianUserId
   ) {
     await createNotification({
+    pushEvent: "service_completed",
       recipientUserId:
         input.technicianUserId,
 
@@ -504,6 +522,7 @@ export async function notifyInvoiceIssued(input: {
 
   if(input.customerUserId){
   await createNotification({
+    pushEvent: "invoice_available",
     recipientUserId: input.customerUserId,
     title: "Invoice issued",
     dedupeKey: `invoice-issued:${input.invoiceId}:${input.customerUserId}`,
@@ -524,6 +543,7 @@ if (
     input.providerUserId
   ) {
     await createNotification({
+    pushEvent: "invoice_available",
       recipientUserId:
         input.providerUserId,
 
@@ -592,6 +612,8 @@ export async function notifyPaymentReceived(input: {
     input.customerUserId
   ) {
     await createNotification({
+    pushEvent: "payment_verified",
+    dedupeKey: `payment-received:${input.paymentId}:${input.customerUserId}`,
       recipientUserId:
         input.customerUserId,
 
@@ -635,6 +657,8 @@ export async function notifyPaymentReceived(input: {
     input.providerUserId
   ) {
     await createNotification({
+    pushEvent: "payment_verified",
+    dedupeKey: `payment-received:${input.paymentId}:${input.providerUserId}`,
       recipientUserId:
         input.providerUserId,
 
@@ -656,7 +680,7 @@ export async function notifyPaymentReceived(input: {
         input.paymentId,
 
       actionUrl:
-        `/service-provider/payments`,
+        `/service-provider/finance/payments`,
 
       metadata: {
         amount:
@@ -681,6 +705,8 @@ export async function notifyPaymentReceived(input: {
     input.technicianUserId
   ) {
     await createNotification({
+    pushEvent: "payment_verified",
+    dedupeKey: `payment-received:${input.paymentId}:${input.technicianUserId}`,
       recipientUserId:
         input.technicianUserId,
 

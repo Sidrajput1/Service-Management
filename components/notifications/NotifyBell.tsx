@@ -155,6 +155,7 @@ export default function NotifyBell() {
         >
           View all notifications
         </DropdownMenuItem>
+        <DropdownMenuItem className="min-h-11 rounded-lg" render={<Link href="/notifications#push-settings" />}>Browser notification settings</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

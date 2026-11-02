@@ -2,7 +2,7 @@
 
 import { Button } from "./ui/button";
 import Link from "next/link";
-import { signOut } from "next-auth/react";
+import { signOut } from "@/lib/push-client";
 
 import {
   Home,
