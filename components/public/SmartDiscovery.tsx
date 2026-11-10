@@ -342,7 +342,7 @@ export function SmartDiscovery({ customer = false }: { customer?: boolean }) {
   const params = useSearchParams(),
     router = useRouter(),
     session = useSession(),
-    catalog = useCustomerServices(),
+    catalog = useCustomerServices(), //Brings up a catalog of services, which will appear in the search form's dropdown
     profile = useCustomerMe();
   const {
     ready: locationReady,
@@ -350,10 +350,12 @@ export function SmartDiscovery({ customer = false }: { customer?: boolean }) {
     choose: chooseLocation,
     clear: clearLocation,
   } = useDiscoveryLocation();
+  // this handle your preferred area. like from choose . select choose location and from clear . clear choosed area or location
   const urlFilters = useMemo(
     () => Object.fromEntries(params.entries()) as DiscoveryFilters,
     [params],
   );
+  // for syncing url and search . Whatever written in url . User just written in search box . And user saved  address
   const [searchSnapshot, setSearchSnapshot] = useState<{
     search: typeof initialDiscoverySearchState;
     effect: {
@@ -363,6 +365,8 @@ export function SmartDiscovery({ customer = false }: { customer?: boolean }) {
     } | null;
   }>({ search: initialDiscoverySearchState, effect: null });
   const searchState = searchSnapshot.search;
+
+  // this is for syncing url and search . Whatever written in url . User just written in search box . And user saved  address
   const reconciliation = useMemo(
     () =>
       reconcileDiscoverySearch(
@@ -376,6 +380,8 @@ export function SmartDiscovery({ customer = false }: { customer?: boolean }) {
   const filters: DiscoveryFilters = reconciliation.state.filters;
   const discoveryLocation = areaFromFilters(filters);
   const base = customer ? "/customer/services" : "/services";
+
+  // if url and search are not same then we will update the searchSnapshot with new state and effect. Effect is used to choose area or replace search in url. If chooseArea is true then we will choose the area and if replaceSearch is not null then we will replace the search in url with expectedSearch.
   if (reconciliation.state !== searchState) {
     setSearchSnapshot({
       search: reconciliation.state,
@@ -389,7 +395,9 @@ export function SmartDiscovery({ customer = false }: { customer?: boolean }) {
           : searchSnapshot.effect,
     });
   }
+  // appliedtransition remember using useRef which effect is already apply, and do not apply same effect again
   const appliedTransition = useRef<typeof searchSnapshot.effect>(null);
+  // and useeffect is run after rendering so he apply effect after rendering. If location is not ready or effect is null or appliedtransition is same as effect then we will not apply the effect. If chooseArea is true then we will choose the area and if replaceSearch is not null then we will replace the search in url with expectedSearch.
   useEffect(() => {
     const effect = searchSnapshot.effect;
     if (!locationReady || !effect || appliedTransition.current === effect)

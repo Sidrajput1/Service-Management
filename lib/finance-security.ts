@@ -6,17 +6,52 @@ import {
   createHmac,
 } from "node:crypto";
 import { ApiAuthError } from "./auth";
+
+// export function assertFinanceWrite(request: Request) {
+//   const origin = request.headers.get("origin"),
+//     site = request.headers.get("sec-fetch-site");
+//   if (
+//     origin !== new URL(request.url).origin ||
+//     (site && site !== "same-origin")
+//   )
+//     throw new ApiAuthError("Open this form in Servizato and try again.", 403);
+//  // console.log("request.headers.get('content-type')", request.headers.get("content-type"));
+//   if (!request.headers.get("content-type")?.startsWith("application/json"))
+//     throw new ApiAuthError("Submit a JSON request.", 415);
+// }
+
 export function assertFinanceWrite(request: Request) {
-  const origin = request.headers.get("origin"),
-    site = request.headers.get("sec-fetch-site");
-  if (
-    origin !== new URL(request.url).origin ||
-    (site && site !== "same-origin")
-  )
+  const origin = request.headers.get("origin");
+  const site = request.headers.get("sec-fetch-site");
+  const targetOrigin = new URL(request.url).origin;
+  const configuredUrl = process.env.NEXTAUTH_URL;
+
+  if (!configuredUrl) {
+    throw new ApiAuthError("Application origin is not configured.", 503);
+  }
+
+  const expectedOrigin = new URL(configuredUrl).origin;
+
+  console.log("[Finance Origin Debug]", {
+    origin,
+    targetOrigin,
+    site,
+    expectedOrigin: process.env.NEXTAUTH_URL
+      ? new URL(process.env.NEXTAUTH_URL).origin
+      : "NOT_CONFIGURED",
+  });
+
+  if (origin !== expectedOrigin || (site !== null && site !== "same-origin")) {
     throw new ApiAuthError("Open this form in Servizato and try again.", 403);
-  if (!request.headers.get("content-type")?.startsWith("application/json"))
+  }
+
+  const contentType = request.headers.get("content-type");
+
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType || "")) {
     throw new ApiAuthError("Submit a JSON request.", 415);
+  }
 }
+
 function payoutKey() {
   const encoded = process.env.PAYOUT_ENCRYPTION_KEY || "";
   const key = Buffer.from(encoded, "base64");
