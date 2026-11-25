@@ -37,6 +37,10 @@ async function load(path, modules = {}) {
   return compiled.exports;
 }
 const financeFields = await load("../models/finance-fields.ts");
+const otp = await load("../lib/job-start-otp.ts", {
+  "./otp": await load("../lib/otp.ts"),
+});
+const testOtp = "634209";
 function copy(value) {
   if (value instanceof Date) return new Date(value);
   if (value?._bsontype === "ObjectId")
@@ -98,6 +102,9 @@ function matches(row, filter) {
         return !expected.$nin.some((value) => String(value) === String(actual));
       if (expected && typeof expected === "object" && "$exists" in expected)
         return (actual !== undefined) === expected.$exists;
+      if (expected && typeof expected === "object" && "$gt" in expected)
+        return actual > expected.$gt;
+      if (expected === null) return actual == null;
       return String(actual) === String(expected);
     })
   );
@@ -122,6 +129,7 @@ async function fixture() {
   const job = await load("../models/job.ts", {
     ...common,
     "./arrival-fields": await load("../models/arrival-fields.ts", common),
+    "./job-quote": await load("../models/job-quote.ts", common),
   });
   class ApiError extends Error {
     constructor(message, status = 401) {
@@ -183,7 +191,8 @@ async function fixture() {
         status: "enroute",
         proofRequired: true,
         proofIds: [objectId(id("f"))],
-        otp: "SECRET_OTP",
+        otp: testOtp,
+        otpExpiresAt: new Date(Date.now() + 86400000),
         arrivalTracking: { latitude: 12, longitude: 13 },
         arrivalNotification: { state: "pending" },
         notes: "Job instructions",
@@ -199,7 +208,7 @@ async function fixture() {
         status: "assigned",
         address,
         notes: "Customer instructions",
-        pricing: { basePrice: 200, finalPrice: 200 },
+        pricing: { basePrice: 200, finalPrice: 200, taxPercent: 0 },
         estimatedPrice: 200,
         scheduledAt: new Date("2026-10-30T12:00:00Z"),
       },
@@ -261,6 +270,10 @@ async function fixture() {
   };
   class FixtureSession {
     async withTransaction(operation) {
+      const earlier = transactionTail;
+      let release;
+      transactionTail = new Promise((resolve) => { release = resolve; });
+      await earlier;
       const before = copy({
         jobs: db.jobs,
         bookings: db.bookings,
@@ -275,18 +288,19 @@ async function fixture() {
         throw error;
       } finally {
         db.inTransaction = false;
+        release();
       }
     }
     async endSession() {}
   }
-  const session = new FixtureSession();
-  odm.startSession = async () => session;
+  let transactionTail = Promise.resolve();
+  odm.startSession = async () => new FixtureSession();
   for (const [model, rows] of [
     [job.default, "jobs"],
     [booking.default, "bookings"],
   ]) {
     model.collection.updateOne = async (filter, update, options) => {
-      assert.equal(options.session, session);
+      assert.ok(options.session instanceof FixtureSession);
       assert.equal(db.inTransaction, true);
       db.writes.push({ model: rows, filter, update });
       if (rows === "jobs" && db.jobWriteFailure)
@@ -300,7 +314,7 @@ async function fixture() {
     };
   }
   job.default.collection.findOneAndUpdate = async (filter, update, options) => {
-    assert.equal(options.session, session);
+    assert.ok(options.session instanceof FixtureSession);
     assert.equal(db.inTransaction, true);
     const row = db.jobs.find((value) => matches(value, filter));
     if (!row) return null;
@@ -328,7 +342,7 @@ async function fixture() {
   job.default.collection.countDocuments = async (filter) =>
     db.jobs.filter((row) => matches(row, filter)).length;
   proofs.default.collection.insertMany = async (values, options) => {
-    assert.equal(options.session, session);
+    assert.ok(options.session instanceof FixtureSession);
     assert.equal(db.inTransaction, true);
     db.proofs.push(...copy(values));
     return {
@@ -352,6 +366,10 @@ async function fixture() {
     "@/lib/service-location.mjs": locations,
     "@/lib/arrival-policy.mjs": arrival,
     "@/lib/arrival-delivery": { deliverArrival: async () => false },
+    "@/lib/job-start-otp": otp,
+    "@/lib/job-quotes": { quoteSummary: async () => ({ latest: null, authorized: null }) },
+    "@/lib/job-running-bill": { jobRunningBill: async () => null },
+    "@/models/invoice": { exists: async () => null },
     "@/models/job": job,
     "@/models/booking": booking,
     "@/models/customer": customer,
@@ -384,6 +402,7 @@ async function fixture() {
     "@/models/technician": technician,
     "./auth": { ApiAuthError: ApiError },
     "./pagination": pagination,
+    "./job-start-otp": otp,
   });
   const mutations = {};
   for (const action of ["accept", "start", "proof", "complete"]) {
@@ -398,6 +417,13 @@ async function fixture() {
           },
         },
         "@/lib/db": { connectToDb: async () => {} },
+        "@/lib/finance-readiness": { requireFinanceReady: async () => {} },
+        "@/lib/invoice-online-payment": { invoiceCanStartCheckout: async () => false },
+        "@/models/invoice": { init: async () => {}, findOne: () => ({ session: async () => null }) },
+        "@/models/finance": {
+          FinanceLedger: { findOne: () => ({ session: async () => ({ _id: objectId(id("5")), billState: "not_submitted", grossPaise: 20000, invoiceVersion: 1, save: async () => {} }) }) },
+          FinanceEvent: { updateOne: async () => {} },
+        },
         "@/lib/api-response": {
           ...api,
           apiFailure: (error) => {
@@ -406,6 +432,16 @@ async function fixture() {
           },
         },
         "@/lib/assigned-job-transaction": assigned,
+        "@/lib/job-start-otp": otp,
+        "@/lib/job-quotes": { pricingForCompletion: async () => ({
+          items: [], serviceBeforeDiscount: 200, subtotal: 200, taxableAmount: 200,
+          discountAmount: 0, taxPercent: 0, taxAmount: 0, grandTotal: 200,
+        }) },
+        "@/lib/job-scheduling": {
+          assertProCanStart: async () => {},
+          proHasReservations: async (technicianId) => db.jobs.some((job) =>
+            String(job.technicianId) === String(technicianId) && !["completed", "cancelled"].includes(job.status)),
+        },
         "@/models/job": job,
         "@/models/booking": booking,
         "@/models/jobProof": proofs,
@@ -417,13 +453,13 @@ async function fixture() {
             "notifyTechnicianAcceptedJob",
             "notifyTechnicianEnroute",
             "notifyCustomerOtpVerified",
+            "notifyJobOtpLocked",
             "notifyJobStatus",
             "notifyInvoiceIssued",
             "notifyServiceCompleted",
           ].map((key) => [
             key,
             async () => {
-              assert.equal(db.inTransaction, false);
               db.notificationAttempts[key] =
                 (db.notificationAttempts[key] || 0) + 1;
               if (
@@ -431,6 +467,8 @@ async function fixture() {
                 db.completionNotifyFailures-- > 0
               )
                 throw new Error("Fixture completion notification failure");
+              if (key === "notifyJobOtpLocked" && db.otpNotifyFailure)
+                throw new Error("Fixture OTP notification failure");
               // The actual delivery helper's recipient dedupe is covered in the notification suite.
               if (
                 ["notifyServiceCompleted", "notifyInvoiceIssued"].includes(
@@ -461,7 +499,7 @@ async function fixture() {
         },
         "@/lib/billing/generateInvoiceForJob": {
           generateInvoiceForJob: async () => {
-            assert.equal(db.inTransaction, false);
+            assert.equal(db.inTransaction, true);
             db.invoices++;
             if (db.invoiceFailures-- > 0)
               throw new Error("Fixture invoice failure");
@@ -473,12 +511,13 @@ async function fixture() {
               grandTotal: 200,
               amountPaid: 0,
               balanceDue: 200,
+              save: async () => {},
             };
           },
         },
       },
     );
-    mutations[action] = (body = {}, jobId = suppliedId) =>
+    mutations[action] = (body = action === "complete" ? { paymentMode: "servizato_online" } : {}, jobId = suppliedId) =>
       handler.POST(
         new Request(`http://test/api/technician/jobs/${jobId}/${action}`, {
           method: "POST",
@@ -487,6 +526,21 @@ async function fixture() {
         { params: Promise.resolve({ id: jobId }) },
       );
   }
+  const providerId = objectId(id("d"));
+  db.recoveryProvider = providerId;
+  const recovery = await load("../app/api/service-provider/assigned-jobs/[id]/start-code/route.ts", {
+    "@/lib/auth": { ApiAuthError: ApiError },
+    "@/lib/api-response": api,
+    "@/lib/assigned-job-transaction": assigned,
+    "@/lib/finance-security": { assertFinanceWrite() {} },
+    "@/lib/pagination": pagination,
+    "@/lib/job-start-otp": otp,
+    "@/models/job": job,
+    "@/lib/service-provider": { requireProvider: async () => {
+      if (!db.recoveryProvider) throw new ApiError("Provider access required", 403);
+      return { provider: { _id: db.recoveryProvider } };
+    } },
+  });
   return {
     db,
     GET,
@@ -494,6 +548,7 @@ async function fixture() {
     mutations,
     assigned,
     engine,
+    recover: () => recovery.POST(new Request("http://test", { method: "POST", body: "{}" }), { params: Promise.resolve({ id: suppliedId }) }),
     models: {
       Job: job.default,
       Booking: booking.default,
@@ -650,7 +705,9 @@ test("workflow capabilities match real stage prerequisites, including OTP, requi
   assert.equal((await read("scheduled")).canAccept, true);
   assert.equal((await read("arrived")).canStart, true);
   assert.equal((await read("arrived")).canComplete, false);
-  assert.equal((await read("otp_verified")).canManageParts, true);
+  assert.equal((await read("otp_verified")).canManageParts, false);
+  assert.equal((await read("in_progress")).canManageParts, true);
+  assert.equal((await read("on_hold")).canManageParts, false);
   assert.equal((await read("otp_verified")).canStart, false);
   assert.equal((await read("in_progress")).canComplete, true);
   f.db.proofs = [];
@@ -720,7 +777,7 @@ test("all four workflow mutation handlers reject cancelled/reassigned/missing bo
         f.db.jobs[0].technicianId = new mongoose.Types.ObjectId(id("2"));
       const body =
         action === "start"
-          ? { otp: "SECRET_OTP" }
+          ? { otp: testOtp }
           : action === "proof"
             ? { proofs: [{ url: "https://example.invalid/new-proof.jpg" }] }
             : {};
@@ -753,13 +810,90 @@ test("valid acceptance and OTP start commit through the booking fence while pres
   assert.equal(f.db.jobs[0].status, "enroute");
   assert.equal(f.db.bookings[0].__v, 1);
   assert.equal(f.db.notifications, 2);
-  assert.equal((await f.mutations.start({ otp: "SECRET_OTP" })).status, 400);
+  assert.equal((await f.mutations.start({ otp: testOtp })).status, 400);
   f.db.jobs[0].status = "arrived";
   assert.equal((await f.mutations.start({ otp: "wrong" })).status, 400);
   assert.equal(f.db.jobs[0].status, "arrived");
-  assert.equal((await f.mutations.start({ otp: "SECRET_OTP" })).status, 200);
+  assert.equal((await f.mutations.start({ otp: testOtp })).status, 200, f.db.lastError?.stack);
   assert.equal(f.db.jobs[0].status, "in_progress");
   assert.ok(f.db.jobs[0].customerOtpVerifiedAt instanceof Date);
+  assert.equal(f.db.jobs[0].otp, undefined);
+  assert.equal((await f.mutations.start({ otp: testOtp })).status, 400);
+  assert.equal(f.db.notificationCounts.notifyCustomerOtpVerified, 1);
+});
+
+test("five incorrect OTP attempts commit on the job, lock once and leave a different job unaffected", async () => {
+  const f = await fixture();
+  f.db.jobs[0].status = "arrived";
+  const otherJobId = id("8");
+  const otherBookingId = new mongoose.Types.ObjectId(id("9"));
+  f.db.bookings.push({ ...copy(f.db.bookings[0]), _id: otherBookingId });
+  f.db.jobs.push({
+    ...copy(f.db.jobs[0]),
+    _id: new mongoose.Types.ObjectId(otherJobId),
+    bookingId: otherBookingId,
+  });
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    assert.equal((await f.mutations.start({ otp: "100001" })).status, 400);
+    assert.equal(f.db.jobs[0].otpAttempts, attempt);
+    assert.equal(f.db.jobs[0].otpLockedAt, undefined);
+  }
+  const fifth = await f.mutations.start({ otp: "100002" });
+  assert.equal(fifth.status, 429);
+  assert.match((await fifth.json()).error, /locked/);
+  assert.equal(f.db.jobs[0].otpAttempts, 5);
+  assert.ok(f.db.jobs[0].otpLockedAt instanceof Date);
+  assert.equal((await f.mutations.start({ otp: testOtp })).status, 429);
+  assert.equal((await f.mutations.start({ otp: "100001" })).status, 429);
+  assert.equal(f.db.jobs[0].status, "arrived");
+  assert.equal(f.db.jobs[0].otpAttempts, 5);
+  assert.equal(f.db.notificationCounts.notifyJobOtpLocked, 1);
+  assert.equal(f.db.jobs[1].otpAttempts, undefined);
+  assert.equal((await f.mutations.start({ otp: testOtp }, otherJobId)).status, 200);
+});
+
+test("concurrent OTP failures stop at five and a notification failure does not undo lockout", async () => {
+  const f = await fixture();
+  f.db.jobs[0].status = "arrived";
+  f.db.otpNotifyFailure = true;
+  const results = await Promise.all(
+    Array.from({ length: 9 }, () => f.mutations.start({ otp: "100001" })),
+  );
+  assert.equal(results.filter((response) => response.status === 400).length, 4);
+  assert.equal(results.filter((response) => response.status === 429).length, 5);
+  assert.equal(f.db.jobs[0].otpAttempts, 5);
+  assert.equal(f.db.jobs[0].status, "arrived");
+  assert.equal(f.db.notificationAttempts.notifyJobOtpLocked, 1);
+});
+
+test("expired codes fail and authorized recovery resets only the current challenge without returning its code", async () => {
+  const f = await fixture();
+  f.db.jobs[0].status = "arrived";
+  f.db.jobs[0].otpExpiresAt = new Date(Date.now() - 1);
+  f.db.jobs[0].otpAttempts = 4;
+  assert.equal((await f.mutations.start({ otp: testOtp })).status, 409);
+  assert.equal(f.db.jobs[0].otpAttempts, 4);
+  f.db.recoveryProvider = new mongoose.Types.ObjectId(id("2"));
+  assert.equal((await f.recover()).status, 404);
+  f.db.recoveryProvider = null;
+  assert.equal((await f.recover()).status, 403);
+  f.db.recoveryProvider = new mongoose.Types.ObjectId(id("d"));
+  const response = await f.recover();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { success: true });
+  assert.notEqual(f.db.jobs[0].otp, testOtp);
+  assert.equal(f.db.jobs[0].otpVersion, 1);
+  assert.equal(f.db.jobs[0].otpAttempts, 0);
+  assert.equal((await f.recover()).status, 409);
+  assert.equal((await f.mutations.start({ otp: testOtp })).status, 400);
+  const currentCode = f.db.jobs[0].otp;
+  const results = await Promise.all([
+    f.mutations.start({ otp: currentCode }),
+    f.mutations.start({ otp: currentCode }),
+  ]);
+  assert.deepEqual(results.map((result) => result.status).sort(), [200, 400]);
+  assert.equal(f.db.jobs[0].status, "in_progress");
+  assert.equal(f.db.notificationCounts.notifyCustomerOtpVerified, 1);
 });
 test("proof insert and job proof references commit together and completion still requires proof", async () => {
   const f = await fixture();
@@ -831,9 +965,9 @@ test("completion replay keeps its counter and completion notification once while
     500,
     f.db.lastError?.stack,
   );
-  assert.equal(f.db.jobs[0].status, "completed");
-  assert.equal(f.db.tech.jobsCompleted, 1);
-  assert.equal(f.db.notificationCounts.notifyServiceCompleted, 1);
+  assert.equal(f.db.jobs[0].status, "in_progress");
+  assert.equal(f.db.tech.jobsCompleted || 0, 0);
+  assert.equal(f.db.notificationCounts.notifyServiceCompleted, undefined);
   const firstWorkLocation = copy(f.db.tech.lastCompletedWorkLocation);
   const retry = await f.mutations.complete();
   assert.equal(retry.status, 200, f.db.lastError?.stack);
@@ -876,9 +1010,17 @@ async function invoiceFixture() {
     notes: "Snapshot note",
   };
   const helper = await load("../lib/billing/generateInvoiceForJob.ts", {
-    "@/models": {
-      Booking: { findById: async () => booking },
-      ServiceOffering: {},
+    "@/models/booking": { findById: async () => booking },
+    "@/lib/invoice-breakdown": await load("../lib/invoice-breakdown.ts"),
+    "@/lib/auth": { ApiAuthError: Error },
+    "@/lib/job-invoice-approval": {
+      assertInvoiceMatchesJob: async () => {},
+      invoiceQuoteFields: (pricing) => pricing,
+    },
+    "@/lib/job-quote-pricing": {
+      unquotedCompletionPricing: async () => ({
+        items: [], discountAmount: 10, subtotal: 200, taxPercent: 12, taxAmount: 24, grandTotal: 224,
+      }),
     },
     "@/models/invoice": {
       findOne: async () => state.invoice,
@@ -900,7 +1042,7 @@ async function invoiceFixture() {
       generateInvoiceNumber: () => "FIXTURE-INVOICE",
     },
     "@/models/job": {
-      findById: async () => state.job,
+      findById: () => ({ select: async () => state.job }),
       updateOne: async (filter, update) => {
         state.writes.push({ filter, update });
         if (state.storedInvoiceId == null)
@@ -972,18 +1114,18 @@ test("completion notification failure can be retried after atomic operational up
     jobId: new mongoose.Types.ObjectId(id("5")),
   };
   f.db.tech.lastCompletedWorkLocation = copy(savedLocation);
-  assert.equal((await f.mutations.complete()).status, 500);
+  assert.equal((await f.mutations.complete()).status, 200);
   assert.equal(f.db.jobs[0].status, "completed");
   assert.ok(f.db.jobs[0].endTime instanceof Date);
   assert.equal(f.db.tech.jobsCompleted, 1);
   assert.equal(f.db.tech.status, "available");
   assert.deepEqual(f.db.tech.lastCompletedWorkLocation, savedLocation);
-  assert.equal(f.db.invoices, 0);
+  assert.equal(f.db.invoices, 1);
   assert.equal((await f.mutations.complete()).status, 200);
   assert.equal(f.db.tech.jobsCompleted, 1);
   assert.equal(f.db.notificationCounts.notifyServiceCompleted, 1);
   assert.equal(f.db.notificationAttempts.notifyServiceCompleted, 2);
-  assert.equal(f.db.invoices, 1);
+  assert.equal(f.db.invoices, 2);
   assert.deepEqual(f.db.tech.lastCompletedWorkLocation, savedLocation);
 });
 test("a failed completion counter update rolls back the job transition and booking fence", async () => {
@@ -996,7 +1138,8 @@ test("a failed completion counter update rolls back the job transition and booki
   assert.equal(f.db.bookings[0].__v, undefined);
   assert.equal(f.db.tech.status, "busy");
   assert.equal(f.db.notifications, 0);
-  assert.equal(f.db.invoices, 0);
+  assert.equal(f.db.invoices, 1);
+  assert.equal(f.db.jobs[0].invoiceId, undefined);
 });
 test("finishing one job retains busy availability when another assigned job remains", async () => {
   const f = await fixture();

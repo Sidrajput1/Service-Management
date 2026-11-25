@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const audience = notificationAudience(user);
     const unreadOnly = new URL(request.url).searchParams.get("unreadOnly") === "true";
     const [rows, unreadCount] = await Promise.all([
-      Notification.find({ ...audience, ...(unreadOnly ? { status: "unread" } : {}), ...(cursor ? { _id: { $lt: cursor } } : {}) }).sort({ _id: -1 }).limit(limit + 1).select("title message type status entityType entityId actionUrl createdAt readAt").lean(),
+      Notification.find({ ...audience, ...(unreadOnly ? { status: "unread" } : {}), ...(cursor ? { _id: { $lt: cursor } } : {}) }).sort({ _id: -1 }).limit(limit + 1).select("title message type status entityType entityId actionUrl actionKind createdAt readAt").lean(),
       Notification.countDocuments({ ...audience, status: "unread" }),
     ]);
     const page = pageResult(rows, limit);

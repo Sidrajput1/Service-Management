@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireCustomer, requireCustomerProfile } from "@/lib/customer";
+import { requireCustomer } from "@/lib/customer";
 
 import { connectToDb } from "@/lib/db";
 import Invoice from "@/models/invoice";
@@ -12,9 +12,11 @@ import "@/models/ServiceOffering";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import Job from "@/models/job";
-import { canPayInvoice } from "@/lib/access-policy.mjs";
+import { invoiceCanStartCheckout } from "@/lib/invoice-online-payment";
+import { invoiceBreakdown } from "@/lib/invoice-breakdown";
 import { objectIdSchema } from "@/lib/pagination";
 import { apiFailure, privateHeaders } from "@/lib/api-response";
+import type { Types } from "mongoose";
 
 export const runtime = "nodejs";
 
@@ -84,8 +86,8 @@ export async function GET(
         customerId:
           customer._id,
       })
-        .select("invoiceNumber jobId bookingId status currency items.description items.qty items.unitPrice items.amount subtotal discountAmount taxPercent taxAmount grandTotal amountPaid balanceDue notes issuedAt dueDate paymentMethod paymentReceivedAt createdAt")
-        .populate(
+        .select("invoiceNumber jobId bookingId customerId status currency items subtotal discountAmount taxPercent taxAmount grandTotal amountPaid balanceDue notes issuedAt dueDate paymentMethod paymentReceivedAt createdAt quotePricingSource appliedPromotion completionBilling razorpayOrderId razorpayPaymentId razorpayPaymentLinkId razorpayCheckoutChannel")
+        .populate<{ bookingId: { _id: Types.ObjectId; pricing?: import("@/models/booking").IBooking["pricing"] } | null }>(
           "bookingId",
           "serviceType scheduledAt address pricing status serviceProviderId serviceOfferingId",
         )
@@ -102,20 +104,31 @@ export async function GET(
       );
     }
 
+    const bookingId = invoice.bookingId?._id;
     const job =
       await Job.findOne({
         _id: invoice.jobId,
-        bookingId: invoice.bookingId,
+        bookingId,
       })
         .select(
           "_id status paymentStatus technicianId",
         )
         .lean();
 
+    const canPay = await invoiceCanStartCheckout({ ...invoice, bookingId });
+    delete invoice.razorpayOrderId;
+    delete invoice.razorpayPaymentId;
+    delete invoice.razorpayPaymentLinkId;
+    delete invoice.razorpayCheckoutChannel;
     return NextResponse.json({
       success: true,
 
-      invoice,
+      invoice: {
+        ...invoice,
+        items: invoice.items.map(({ itemType, description, qty, unitPrice, amount, taxable }) =>
+          ({ itemType, description, qty, unitPrice, amount, taxable })),
+      },
+      breakdown: invoiceBreakdown(invoice, invoice.bookingId?.pricing),
 
       job,
 
@@ -126,7 +139,7 @@ export async function GET(
         email: customer.email,
       },
 
-      canPay: canPayInvoice(invoice),
+      canPay,
     }, { headers: privateHeaders });
   } catch (error) { return apiFailure(error); }
 }

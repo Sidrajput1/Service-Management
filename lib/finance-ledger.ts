@@ -27,6 +27,10 @@ import { createNotification } from "./notification";
 import { billActionSchema } from "./finance-validation";
 import type { z } from "zod";
 import { financeReady, requireFinanceReady } from "./finance-readiness";
+import { assertInvoiceMatchesJob } from "./job-invoice-approval";
+import { invoiceBreakdown } from "./invoice-breakdown";
+import type { IBooking } from "@/models/booking";
+import { invoiceCanStartCheckout } from "./invoice-online-payment";
 
 export interface FinanceActor {
   _id: Types.ObjectId;
@@ -99,7 +103,7 @@ export async function invoiceContext(
   const invoice = await Invoice.findById(invoiceId).session(session || null);
   if (!invoice) throw new ApiAuthError("Invoice not found", 404);
   const job = invoice.jobId
-    ? await Job.findById(invoice.jobId).session(session || null)
+    ? await Job.findById(invoice.jobId).select("+finalQuote").session(session || null)
     : null;
   const booking = job
     ? await Booking.findById(job.bookingId).session(session || null)
@@ -333,6 +337,7 @@ export function publicBill(
   invoice: IInvoice,
   row: FinanceLedgerData | null,
   jobStatus: string,
+  bookingPrice?: IBooking["pricing"],
 ) {
   return {
     invoiceId: invoice._id,
@@ -356,7 +361,9 @@ export function publicBill(
     grandTotal: invoice.grandTotal,
     amountPaid: invoice.amountPaid,
     balanceDue: invoice.balanceDue,
+    breakdown: invoiceBreakdown(invoice, bookingPrice),
     invoiceStatus: invoice.status,
+    completionBilling: invoice.completionBilling === true,
     invoiceVersion: row?.invoiceVersion || 1,
     grossPaise: row?.grossPaise ?? paise(invoice.grandTotal),
     billState: row?.billState || "not_submitted",
@@ -471,8 +478,12 @@ export async function billAction(
           "The service must be completed and its final invoice available before confirming the bill.",
           409,
         );
+      if (input.action !== "dispute")
+        await assertInvoiceMatchesJob(invoice, job, session);
       const initial = await ensureFinanceLedger(invoice, session),
         row = await lockLedger(initial._id, session);
+      if (input.action !== "dispute" && row.grossPaise !== paise(invoice.grandTotal))
+        throw new ApiAuthError("The invoice and recorded bill need reconciliation.", 409);
       if (input.invoiceVersion !== row.invoiceVersion)
         throw new ApiAuthError(
           "The bill changed. Refresh and review the latest details.",
@@ -489,6 +500,10 @@ export async function billAction(
             "Only the assigned service team can submit the bill.",
             403,
           );
+        if (input.paymentMode !== "servizato_online" &&
+            (invoice.razorpayCheckoutChannel || invoice.razorpayOrderId || invoice.razorpayPaymentLinkId) &&
+            (row.paymentMode === "servizato_online" || invoice.razorpayCheckoutChannel))
+          throw new ApiAuthError("An online checkout is already linked to this bill. Ask support to review the payment method.", 409);
         if (
           row.billState === "disputed" ||
           (["confirmed", "reviewed"].includes(row.billState) &&
@@ -547,7 +562,7 @@ export async function billAction(
           return {
             result: {
               confirmed: true,
-              bill: publicBill(invoice, row, job.status),
+              bill: publicBill(invoice, row, job.status, context.booking.pricing),
             },
             event: {
               ledgerId: row._id,
@@ -621,7 +636,7 @@ export async function billAction(
       setCommissionDueDate(row);
       await row.save({ session });
       return {
-        result: { bill: publicBill(invoice, row, job.status) },
+        result: { bill: publicBill(invoice, row, job.status, context.booking.pricing) },
         event: {
           ledgerId: row._id,
           providerId: row.providerId,
@@ -646,7 +661,7 @@ export async function applyVerifiedInvoicePayment(
   session: ClientSession,
 ) {
   if (!invoice.jobId || !invoice.bookingId) return;
-  const job = await Job.findById(invoice.jobId).session(session);
+  const job = await Job.findById(invoice.jobId).select("+finalQuote").session(session);
   const booking = job
     ? await Booking.findById(job.bookingId).session(session)
     : null;
@@ -738,44 +753,101 @@ export async function applyVerifiedInvoicePayment(
           ? "paid"
           : "unpaid";
   }
+  if (
+    invoice.completionBilling &&
+    row.invoiceVersion === 1 &&
+    row.billState === "pending" &&
+    row.paymentMode === "servizato_online" &&
+    row.paymentState === "paid" &&
+    invoice.status === "paid" &&
+    row.grossPaise === paise(invoice.grandTotal)
+  ) {
+    try {
+      await assertInvoiceMatchesJob(invoice, job, session);
+      // A captured payment confirms this final bill without inventing a
+      // separate customer quote decision or a manual confirmation actor.
+      row.billState = "confirmed";
+      row.confirmedAt = invoice.paymentReceivedAt || new Date();
+      await FinanceEvent.updateOne(
+        { dedupeKey: `completion-bill-paid:${invoice._id}` },
+        {
+          $setOnInsert: {
+            kind: "bill_confirmed_by_online_payment",
+            actorRole: "gateway",
+            invoiceId: invoice._id,
+            ledgerId: row._id,
+            providerId: row.providerId,
+            details: {
+              invoiceVersion: row.invoiceVersion,
+              confirmationSource: "verified_online_payment",
+              grossPaise: row.grossPaise,
+            },
+          },
+        },
+        { upsert: true, session },
+      );
+    } catch (error) {
+      if (!(error instanceof ApiAuthError) || ![404, 409].includes(error.status))
+        throw error;
+      row.billState = "disputed";
+      row.disputeReason = "The captured payment and final job pricing need reconciliation.";
+    }
+  }
   await row.save({ session });
   return row;
 }
-export async function notifyBillChanged(invoiceId: string, key: string) {
+export async function notifyBillChanged(
+  invoiceId: string,
+  input: z.infer<typeof billActionSchema>,
+) {
   try {
-    const invoice = await Invoice.findById(invoiceId)
-      .select("customerId jobId")
-      .lean();
+    const invoice = await Invoice.findById(invoiceId);
     if (!invoice) return;
+    const key = input.requestId;
     const [customer, job] = await Promise.all([
       Customer.findById(invoice.customerId).select("userId").lean(),
-      Job.findById(invoice.jobId).select("serviceProviderId").lean(),
+      invoice.jobId ? Job.findById(invoice.jobId).select("serviceProviderId").lean() : null,
     ]);
     const provider = job
       ? await ServiceProvider.findById(job.serviceProviderId)
           .select("ownerId")
           .lean()
       : null;
-    for (const [recipient, actionUrl] of [
-      [customer?.userId, `/customer/bookings/${invoice.bookingId || ""}`],
-      [provider?.ownerId, "/service-provider/finance/earnings"],
-    ] as const)
-      if (recipient)
-        await createNotification({
-          pushEvent: "bill_review",
-          recipientUserId: String(recipient),
-          title: "Bill and payment update",
-          message:
-            "Please review the saved bill and payment details in your account.",
-          type: "invoice",
-          entityType: "invoice",
-          entityId: invoiceId,
-          actionUrl: actionUrl.includes("/bookings/")
-            ? `/customer/invoice/${invoiceId}`
-            : actionUrl,
-          dedupeKey: `finance-bill:${key}:${recipient}`,
-          channel: "in_app",
-        });
+    const notice = {
+      pushEvent: "bill_review",
+      title: "Bill and payment update",
+      message: "Please review the saved bill and payment details in your account.",
+      type: "invoice",
+      entityType: "invoice",
+      entityId: invoiceId,
+      channel: "in_app",
+    } as const;
+    if (customer?.userId) {
+      const row = input.action === "confirm"
+        ? await FinanceLedger.findOne({ invoiceId: invoice._id }).lean() : null;
+      const ready = row?.invoiceVersion === input.invoiceVersion &&
+        await invoiceCanStartCheckout(invoice, { bill: row });
+      await createNotification({
+        ...notice,
+        ...(ready ? {
+          title: "Your bill is ready to pay",
+          message: "Open your booking to pay securely through Servizato.",
+          actionKind: "pay_invoice" as const,
+        } : {}),
+        recipientUserId: String(customer.userId),
+        actionUrl: invoice.bookingId ? `/customer/bookings/${invoice.bookingId}` : `/customer/invoice/${invoiceId}`,
+        dedupeKey: input.action === "confirm"
+          ? `finance-confirm:${invoiceId}:${input.invoiceVersion}:${customer.userId}`
+          : `finance-bill:${key}:${customer.userId}`,
+      });
+    }
+    if (provider?.ownerId)
+      await createNotification({
+        ...notice,
+        recipientUserId: String(provider.ownerId),
+        actionUrl: "/service-provider/finance/earnings",
+        dedupeKey: `finance-bill:${key}:${provider.ownerId}`,
+      });
     const admins = await User.find({ role: "admin", isActive: { $ne: false } })
       .select("_id")
       .lean();
@@ -801,7 +873,10 @@ export async function assertInvoiceMutable(
   session?: ClientSession,
 ) {
   if (
+    invoice.quotePricingSource === "job" ||
+    (invoice.jobId && invoice.status !== "draft") ||
     invoice.finalizedAt ||
+    invoice.razorpayCheckoutChannel ||
     invoice.razorpayOrderId ||
     invoice.razorpayPaymentLinkId ||
     paise(invoice.amountPaid) > 0 ||

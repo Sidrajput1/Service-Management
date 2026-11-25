@@ -152,6 +152,15 @@ export async function getRazorpayPayment(
   );
 }
 
+type GatewayOrder = { id: string; amount: number; amount_due: number; currency: string; status: string; receipt?: string };
+
 export async function getRazorpayOrder(orderId: string) {
-  return razorpayRequest<{ id: string; amount: number; amount_due: number; currency: string; status: string }>(`/orders/${encodeURIComponent(orderId)}`, "GET");
+  return razorpayRequest<GatewayOrder>(`/orders/${encodeURIComponent(orderId)}`, "GET");
+}
+
+export async function findRazorpayOrderByReceipt(receipt: string) {
+  const result = await razorpayRequest<{ items: GatewayOrder[] }>(`/orders?receipt=${encodeURIComponent(receipt)}`, "GET");
+  const orders = result.items.filter((order) => order.receipt === receipt);
+  if (orders.length > 1) throw new Error("Order receipt needs reconciliation");
+  return orders[0] ?? null;
 }

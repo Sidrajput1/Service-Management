@@ -57,9 +57,11 @@ export interface INotification extends Document {
     | "customer"
     | "technician"
     | "service_provider"
-    | "service_offering";
+    | "service_offering"
+    | "service_request";
   entityId?: mongoose.Types.ObjectId;
   actionUrl?: string;
+  actionKind?: "pay_invoice";
   dedupeKey?: string;
   metadata?: Record<string, any>;
   readAt?: Date;
@@ -134,10 +136,12 @@ const NotificationSchema = new Schema<INotification>(
         "technician",
         "service_provider",
         "service_offering",
+        "service_request",
       ],
     },
     entityId: { type: Schema.Types.ObjectId },
     actionUrl: String,
+    actionKind: { type: String, enum: ["pay_invoice"] },
     dedupeKey: String,
     metadata: Schema.Types.Mixed,
     readAt: Date,

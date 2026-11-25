@@ -7,6 +7,10 @@ import {
 } from "@/lib/service-location.mjs";
 import { arrivalConfig } from "@/lib/arrival-policy.mjs";
 import { deliverArrival } from "@/lib/arrival-delivery";
+import { jobOtpSelect, jobOtpState } from "@/lib/job-start-otp";
+import { quoteSummary } from "@/lib/job-quotes";
+import { jobRunningBill } from "@/lib/job-running-bill";
+import Invoice from "@/models/invoice";
 import Job from "@/models/job";
 import "@/models/booking";
 import "@/models/customer";
@@ -57,12 +61,13 @@ export async function GET(
     stage = "job_read";
     const job = await Job.findOne({ _id: id, technicianId: tech._id })
       .select(
-        "bookingId serviceProviderId technicianId invoiceId scheduledAt status paymentStatus paymentReceivedAt paymentMethod startTime endTime proofRequired proofSubmittedAt proofIds partsUsed notes acceptedAt arrivedAt customerOtpVerifiedAt createdAt updatedAt",
+        "bookingId serviceProviderId technicianId invoiceId scheduledAt scheduledEndAt status paymentStatus paymentReceivedAt paymentMethod startTime endTime proofRequired proofSubmittedAt proofIds partsUsed partsVersion partsDraftVersion quotedPartsDraftVersion latestQuoteId authorizedQuoteId notes acceptedAt arrivedAt customerOtpVerifiedAt createdAt updatedAt",
       )
+      .select(jobOtpSelect)
       .populate({
         path: "bookingId",
         select:
-          "serviceType subService customerId status scheduledAt timeWindow technicianId estimatedPrice pricing notes address.addressLine address.locality address.city address.state address.pincode +address.location +address.locationConfirmation",
+          "serviceType subService customerId status scheduledAt timeWindow technicianId estimatedPrice pricing notes paymentMethod address.addressLine address.locality address.city address.state address.pincode +address.location +address.locationConfirmation",
         options: { includeServiceLocation: true },
         populate: { path: "customerId", select: "name phone" },
       })
@@ -107,6 +112,13 @@ export async function GET(
     else if (!activeStatuses.includes(job.status))
       reason = "This job is closed or has an unsupported workflow status.";
     const permitted = !reason;
+    const otpState = job.status === "arrived" ? jobOtpState(job) : null;
+    const quotes = await quoteSummary(job);
+    const quotePending = quotes.latest?.status === "pending_customer_approval";
+    const draftNeedsReview = (job.partsDraftVersion ?? 0) > (job.quotedPartsDraftVersion ?? 0) ||
+      (!job.latestQuoteId && job.partsUsed?.some((part) => part.source !== "on_site" && Number(part.price) > 0));
+    const invoiceLocked = Boolean(await Invoice.exists({ jobId: job._id, status: { $ne: "draft" } }));
+    const runningBill = booking ? await jobRunningBill(job, job.bookingId as unknown as import("@/models/booking").IBooking) : null;
     const workflow = {
       access: permitted ? "active" : "read_only",
       reason,
@@ -115,15 +127,16 @@ export async function GET(
         permitted &&
         job.status === "enroute" &&
         ["available", "busy"].includes(tech.status),
-      canStart: permitted && job.status === "arrived",
+      canStart: permitted && otpState === "ready",
       canUploadProof:
         permitted && ["arrived", "in_progress", "on_hold"].includes(job.status),
       canManageParts:
         permitted &&
-        ["otp_verified", "in_progress", "on_hold"].includes(job.status),
+        job.status === "in_progress" && !invoiceLocked,
       canComplete:
         permitted &&
         ["in_progress", "on_hold"].includes(job.status) &&
+        !quotePending && !draftNeedsReview &&
         (!job.proofRequired || Boolean(job.proofIds?.length)),
       canRetryInvoice:
         permitted && job.status === "completed" && !job.invoiceId,
@@ -140,9 +153,19 @@ export async function GET(
       config = null;
     }
     if (job.arrivedAt) await deliverArrival(id).catch(() => undefined);
+    delete job.otpLockedAt;
+    delete job.otpAttempts;
+    delete job.otpExpiresAt;
+    delete job.otpVersion;
+    delete job.otp;
     return privateJson({
       job,
+      runningBill,
       workflow,
+      verificationIssue: otpState && otpState !== "ready" ? otpState : null,
+      quoteStatus: quotes.latest?.status ?? null,
+      authorizedCharges: quotes.authorized?.pricing.items.filter((item) => item.chargeType !== "service") ?? [],
+      draftNeedsReview: Boolean(draftNeedsReview),
       journey: {
         canTrack:
           active &&

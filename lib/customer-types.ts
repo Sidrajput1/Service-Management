@@ -1,3 +1,5 @@
+import type { QuoteView } from "@/models/job-quote";
+
 export interface Address {
   location?: { type: "Point"; coordinates: [number, number] };
   locationConfirmed?: boolean;
@@ -35,6 +37,7 @@ export interface JobSummary {
   technicianId?: Pro;
   scheduledAt?: string;
   updatedAt?: string;
+  scheduledEndAt?: string;
   invoiceId?: string;
   paymentStatus?: string;
   otp?: string;
@@ -84,12 +87,15 @@ export interface InvoiceDetail extends InvoiceSummary {
   paymentReceivedAt?: string;
 }
 export interface BookingDetail {
+  runningBill?: import("./job-running-bill").RunningBill | null;
   booking: BookingSummary;
   provider?: { companyName: string; phone?: string };
   service?: { name: string; description?: string };
   technician?: Pro;
   job?: JobSummary;
   invoice?: InvoiceSummary;
+  quote?: QuoteView | null;
+  verification?: "locked" | "unavailable" | null;
   tracking?: { label: string; description: string; key: string };
   timeline: TimelineEntry[];
   customer: CustomerIdentity;
@@ -111,6 +117,7 @@ export interface NotificationItem {
   status: string;
   createdAt: string;
   actionUrl?: string;
+  actionKind?: "pay_invoice";
   entityType?: string;
   entityId?: string;
 }

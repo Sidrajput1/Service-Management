@@ -969,6 +969,7 @@ test("real Job JSON excludes OTP and private tracking state, and status changes 
   const Job = (
     await load("../models/job.ts", {
       "./arrival-fields": fields,
+      "./job-quote": await load("../models/job-quote.ts"),
       "@/lib/service-location.mjs": locations,
     })
   ).default;
@@ -1016,11 +1017,16 @@ test("OTP start still rejects a wrong code and cannot start an en-route job", as
   const handler = await load("../app/api/technician/jobs/[id]/start/route.ts", {
     "@/lib/auth": { requireRole: async () => {}, ApiAuthError: ApiError },
     "@/lib/api-response": responses,
+    "@/lib/job-start-otp": await load("../lib/job-start-otp.ts", { "./otp": await load("../lib/otp.ts") }),
+    "@/lib/job-scheduling": { assertProCanStart: async () => {} },
     "@/lib/assigned-job-transaction": {
       withAssignedJob: async (jobId, techId, operation) => {
         assert.equal(jobId, id("1"));
         assert.equal(techId, id("3"));
-        return operation({ job: { ...stored }, session: {} });
+        return operation({
+          job: { ...stored, otpExpiresAt: new Date(Date.now() + 60_000), save: async () => {} },
+          session: {},
+        });
       },
     },
     "@/lib/technician": {
@@ -1031,7 +1037,7 @@ test("OTP start still rejects a wrong code and cannot start an en-route job", as
       findById: () => chain({ ...stored }),
       findOneAndUpdate: async (filter, changes) => {
         assert.equal(filter.status, "arrived");
-        assert.equal(filter.otp, "682194");
+        assert.equal(filter.customerOtpVerifiedAt, null);
         writes++;
         status = changes.$set.status;
         return { _id: id("1"), bookingId: id("2"), status };
@@ -1183,6 +1189,10 @@ test("authorized Pro detail uses only the assigned active booking snapshot and h
     },
   });
   const handler = await load("../app/api/technician/jobs/[id]/route.ts", {
+    "@/lib/job-start-otp": { jobOtpState: () => "ready", jobOtpSelect: "" },
+    "@/lib/job-quotes": { quoteSummary: async () => ({ latest: null, authorized: null }) },
+    "@/lib/job-running-bill": { jobRunningBill: async () => null },
+    "@/models/invoice": { exists: async () => null },
     "@/lib/technician": {
       requireTechnicianProfile: async () => ({
         tech: { _id: id("3"), status: "busy" },
@@ -1225,9 +1235,13 @@ test("authorized Pro detail uses only the assigned active booking snapshot and h
 
 test("customer booking detail keeps the confirmed address and arrival timeline while coordinates are active-only", async () => {
   let status = "arrived",
-    owned = true;
+    owned = true,
+    locked = false;
   const saved = address();
   const handler = await load("../app/api/customer/bookings/[id]/route.ts", {
+    "@/lib/job-start-otp": await load("../lib/job-start-otp.ts", { "./otp": await load("../lib/otp.ts") }),
+    "@/lib/job-quotes": { quoteSummary: async () => ({ latest: null }) },
+    "@/lib/job-running-bill": { jobRunningBill: async () => null },
     "@/lib/service-location.mjs": locations,
     "@/lib/api-response": {
       ...responses,
@@ -1249,6 +1263,8 @@ test("customer booking detail keeps the confirmed address and arrival timeline w
           acceptedAt: new Date(),
           technicianId: { _id: id("3"), userId: { name: "Assigned Pro" } },
           otp: "682194",
+          otpExpiresAt: new Date(Date.now() + 86400000),
+          ...(locked ? { otpAttempts: 5, otpLockedAt: new Date() } : {}),
         }),
     },
     "@/models/invoice": {},
@@ -1262,6 +1278,7 @@ test("customer booking detail keeps the confirmed address and arrival timeline w
                   _id: id("2"),
                   status: "assigned",
                   createdAt: new Date(),
+                  technicianId: { _id: id("3") },
                   address: structuredClone(saved),
                   serviceProviderId: {
                     _id: id("4"),
@@ -1293,6 +1310,11 @@ test("customer booking detail keeps the confirmed address and arrival timeline w
       (step) => step.key === "technician_arrived" && step.completed,
     ),
   );
+  locked = true;
+  const unavailable = await (await get()).json();
+  assert.equal(unavailable.verification, "locked");
+  assert.equal(unavailable.job.otp, undefined);
+  assert.equal(unavailable.job.otpAttempts, undefined);
   status = "completed";
   const complete = await (await get()).json();
   assert.equal(complete.booking.address.location, undefined);

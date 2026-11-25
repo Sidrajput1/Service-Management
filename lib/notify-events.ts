@@ -1,6 +1,61 @@
 import type { PushEvent } from "./push-policy.mjs";
 import { arrivalMessage } from "./arrival-message.mjs";
-import { createNotification } from "./notification";
+import { createNotification, createNotificationForRole } from "./notification";
+
+export async function notifyJobOtpLocked(input: {
+  jobId: string;
+  version: number;
+  providerUserId: string | null;
+}) {
+  const notification = {
+    title: "Job verification locked",
+    message: "A Pro reached the job verification attempt limit. Review the job and issue a new code if appropriate.",
+    type: "job",
+    entityType: "job",
+    entityId: input.jobId,
+    dedupeKey: `job-otp-locked:${input.jobId}:${input.version}`,
+  } as const;
+  if (input.providerUserId)
+    await createNotification({
+      ...notification,
+      recipientUserId: input.providerUserId,
+      actionUrl: `/service-provider/assigned-jobs/${input.jobId}`,
+    });
+  else
+    await createNotificationForRole("admin", {
+      ...notification,
+      actionUrl: "/admin/jobs",
+    });
+}
+
+export async function notifyJobQuote(input: {
+  jobId: string;
+  bookingId: string;
+  version: number;
+  status: "pending_customer_approval" | "approved" | "rejected" | "superseded";
+  customerUserId: string | null;
+  providerUserId: string | null;
+}) {
+  const pending = input.status === "pending_customer_approval";
+  const recipientUserId = pending ? input.customerUserId : input.providerUserId;
+  if (!recipientUserId || input.status === "superseded") return;
+  const title = pending
+    ? "Revised service quote"
+    : input.status === "approved" ? "Revised quote approved" : "Revised quote declined";
+  await createNotification({
+    recipientUserId,
+    title,
+    type: "job",
+    entityType: "job",
+    entityId: input.jobId,
+    message: pending
+      ? "Your provider sent a revised service quote. Open your booking to review it."
+      : "Your customer responded to the revised quote. Open the job to review their decision.",
+    actionUrl: pending ? `/customer/bookings/${input.bookingId}` : `/service-provider/assigned-jobs/${input.jobId}`,
+    dedupeKey: `job-quote:${input.jobId}:${input.version}:${input.status}:${recipientUserId}`,
+    pushEvent: "quote_update",
+  });
+}
 
 
 export async function notifyBookingCreated(input: {
@@ -517,6 +572,7 @@ export async function notifyInvoiceIssued(input: {
     invoiceNumber: string;
 
     amount: number;
+    canPayOnline?: boolean;
 }) {
   if (!input.customerUserId) return;
 
@@ -530,7 +586,8 @@ export async function notifyInvoiceIssued(input: {
     type: "invoice",
     entityType: "invoice",
     entityId: input.invoiceId,
-    actionUrl: `/customer/invoice/${input.invoiceId}`,
+    actionUrl: input.canPayOnline && input.bookingId ? `/customer/bookings/${input.bookingId}` : `/customer/invoice/${input.invoiceId}`,
+    actionKind: input.canPayOnline && input.bookingId ? "pay_invoice" : undefined,
     metadata: { 
       bookingId: input.bookingId,
       invoiceNumber: input.invoiceNumber,

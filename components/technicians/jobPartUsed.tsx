@@ -1,375 +1,343 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { PackagePlus, Plus, Trash2, Calculator } from "lucide-react";
-
+import { useRef, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { PackagePlus, Pencil, Plus, Trash2 } from "lucide-react";
 import api from "@/lib/api";
 import { useRefreshTechnicianJob } from "@/hooks/useTechnicianJobs";
 import {
   createTechnicianActionGate,
   technicianMutationMessage,
 } from "@/lib/technician-workflow.mjs";
-
+import type { TechnicianJobPart } from "@/lib/technician-job-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-type JobPart = {
-  partName: string;
-  qty: number;
-  price?: number;
-};
-
-type JobPartsUsedProps = {
-  jobId: string;
-  partsUsed?: JobPart[];
-  jobStatus: string;
-  onUpdated?: (parts: JobPart[]) => void;
-  readOnly?: boolean;
-  actionGate?: ReturnType<typeof createTechnicianActionGate>;
-  onBusyChange?: (busy: boolean) => void;
-};
-
-const EDITABLE_STATUSES = ["otp_verified", "in_progress", "on_hold"];
-
+type CatalogPart = { _id: string; name: string; price: number; unit?: string };
 function currency(value?: number) {
-  if (typeof value !== "number" || !Number.isFinite(value))
-    return "Not recorded";
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(value);
+  return typeof value === "number" && Number.isFinite(value)
+    ? new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+      }).format(value)
+    : "Not recorded";
 }
-
 export default function JobPartsUsed({
   jobId,
   partsUsed = [],
+  partsVersion = 0,
   jobStatus,
-  onUpdated,
   readOnly = false,
   actionGate,
   onBusyChange,
-}: JobPartsUsedProps) {
+}: {
+  jobId: string;
+  partsUsed?: TechnicianJobPart[];
+  partsVersion?: number;
+  jobStatus: string;
+  readOnly?: boolean;
+  actionGate?: ReturnType<typeof createTechnicianActionGate>;
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const refresh = useRefreshTechnicianJob(jobId);
   const [ownGate] = useState(() => createTechnicianActionGate());
   const gate = actionGate || ownGate;
-  const [parts, setParts] = useState<JobPart[]>(partsUsed);
-
-  const [showForm, setShowForm] = useState(false);
-
+  const [form, setForm] = useState<"new" | TechnicianJobPart | null>(null);
   const [partName, setPartName] = useState("");
-
   const [qty, setQty] = useState("1");
-
   const [price, setPrice] = useState("");
-
-  const [saving, setSaving] = useState(false);
-
-  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
-
-  const canEdit = !readOnly && EDITABLE_STATUSES.includes(jobStatus);
-
-  const totalPartsAmount = useMemo(() => {
+  const [note, setNote] = useState("");
+  const [catalogId, setCatalogId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const command = useRef<{ payload: string; requestId: string } | null>(null);
+  const canEdit = !readOnly && jobStatus === "in_progress";
+  const catalog = useQuery({
+    queryKey: ["technician-job-parts", jobId],
+    queryFn: async ({ signal }) =>
+      (
+        await api.get<{ items: CatalogPart[] }>(
+          `/technician/jobs/${jobId}/parts`,
+          { signal },
+        )
+      ).data,
+    enabled: canEdit,
+    gcTime: 0,
+    retry: 1,
+  });
+  function edit(part?: TechnicianJobPart) {
+    setForm(part || "new");
+    setPartName(part?.partName || "");
+    setQty(String(part?.qty ?? 1));
+    setPrice(part?.price == null ? "" : String(part.price));
+    setNote(part?.note || "");
+    setCatalogId("");
+  }
+  async function save(
+    action: "add" | "update" | "remove",
+    part?: TechnicianJobPart,
+  ) {
+    if (!canEdit || gate.isBusy()) return;
+    const parsedQty = Number(qty),
+      parsedPrice = Number(price);
     if (
-      parts.some(
-        (part) =>
-          typeof part.price !== "number" ||
-          !Number.isFinite(part.price) ||
-          !Number.isFinite(part.qty),
-      )
-    )
-      return undefined;
-    return parts.reduce(
-      (total, part) => total + Number(part.qty || 0) * Number(part.price || 0),
-      0,
-    );
-  }, [parts]);
-
-  async function handleAddPart() {
-    if (!canEdit || gate.isBusy()) return;
-    const cleanName = partName.trim();
-
-    const parsedQty = Number(qty);
-
-    const parsedPrice = Number(price);
-
-    if (!cleanName) {
-      toast.error("Enter part name");
+      action !== "remove" &&
+      (!qty.trim() ||
+        !Number.isFinite(parsedQty) ||
+        parsedQty <= 0 ||
+        !price.trim() ||
+        !Number.isFinite(parsedPrice) ||
+        parsedPrice < 0 ||
+        !partName.trim())
+    ) {
+      toast.error(
+        "Enter the part name, a positive quantity and a valid unit price.",
+      );
       return;
     }
-
-    if (!Number.isFinite(parsedQty) || parsedQty <= 0) {
-      toast.error("Quantity must be greater than zero");
-      return;
-    }
-
-    if (!price.trim() || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      toast.error("Enter a valid price");
-      return;
-    }
-
+    const input =
+      action === "add"
+        ? {
+            partName: partName.trim(),
+            qty: parsedQty,
+            price: parsedPrice,
+            ...(catalogId ? { priceItemId: catalogId } : {}),
+            ...(note.trim() ? { note: note.trim() } : {}),
+          }
+        : {
+            expectedVersion: partsVersion,
+            ...(action === "update" ? { qty: parsedQty } : {}),
+          };
+    const payload = JSON.stringify({ action, partId: part?.partId, ...input });
+    if (command.current?.payload !== payload)
+      command.current = { payload, requestId: crypto.randomUUID() };
+    const body = { ...input, requestId: command.current.requestId };
     await gate.run(async () => {
+      setBusy(true);
+      onBusyChange?.(true);
       try {
-        setSaving(true);
-        onBusyChange?.(true);
-
-        const { data } = await api.post(`/technician/jobs/${jobId}/parts`, {
-          partName: cleanName,
-          qty: parsedQty,
-          price: parsedPrice,
-        });
-
-        const updatedParts = data?.partsUsed;
-        if (!Array.isArray(updatedParts))
-          throw new Error("Part update was not confirmed");
-
-        setParts(updatedParts);
-
-        onUpdated?.(updatedParts);
-        await refresh();
-
-        setPartName("");
-        setQty("1");
-        setPrice("");
-        setShowForm(false);
-        toast.success("Part saved to this job.");
+        const path = `/technician/jobs/${jobId}/parts`;
+        if (action === "add") await api.post(path, body);
+        else if (action === "update")
+          await api.patch(`${path}/${part!.partId}`, body);
+        else await api.delete(`${path}/${part!.partId}`, { data: body });
+        command.current = null;
+        setForm(null);
+        toast.success(
+          action === "remove"
+            ? "Part removed. Running bill updated."
+            : "Part saved. Running bill updated.",
+        );
       } catch (error) {
         toast.error(
           technicianMutationMessage(
             error,
-            "Unable to add this part. Refresh the job and try again.",
+            "Part update was not confirmed. Refresh and try again.",
           ),
         );
-        await refresh();
       } finally {
-        setSaving(false);
+        await refresh();
+        setBusy(false);
         onBusyChange?.(false);
       }
     });
   }
-
-  async function handleRemovePart(index: number) {
-    if (!canEdit || gate.isBusy()) return;
-    await gate.run(async () => {
-      try {
-        setDeletingIndex(index);
-        onBusyChange?.(true);
-
-        const { data } = await api.delete(
-          `/technician/jobs/${jobId}/parts/${index}`,
-        );
-
-        const updatedParts = data?.partsUsed;
-        if (!Array.isArray(updatedParts))
-          throw new Error("Part update was not confirmed");
-
-        setParts(updatedParts);
-
-        onUpdated?.(updatedParts);
-        await refresh();
-        toast.success("Part removed from this job.");
-      } catch (error) {
-        toast.error(
-          technicianMutationMessage(
-            error,
-            "Unable to remove this part. Refresh the job and try again.",
-          ),
-        );
-        await refresh();
-      } finally {
-        setDeletingIndex(null);
-        onBusyChange?.(false);
-      }
-    });
-  }
-
   return (
-    <Card className="rounded-3xl border-border/70 shadow-sm">
+    <Card className="min-w-0 rounded-2xl">
       <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <PackagePlus className="h-5 w-5" />
-              Parts used
-            </CardTitle>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add any parts or materials used while completing this service.
-            </p>
-          </div>
-
-          {parts.length > 0 && (
-            <Badge variant="secondary" className="rounded-full">
-              {parts.length} {parts.length === 1 ? "part" : "parts"}
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {parts.length === 0 ? (
-          <div className="rounded-2xl border border-dashed p-6 text-center">
-            <PackagePlus className="mx-auto h-7 w-7 text-muted-foreground" />
-
-            <p className="mt-3 font-medium">No parts added</p>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add a part when one is needed for this service.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {parts.map((part, index) => {
-              const lineTotal =
-                typeof part.price === "number" &&
-                Number.isFinite(part.price) &&
-                Number.isFinite(part.qty)
-                  ? part.qty * part.price
-                  : undefined;
-
-              return (
-                <div
-                  key={`${part.partName}-${index}`}
-                  className="rounded-2xl border bg-muted/20 p-4"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="font-medium">{part.partName}</p>
-
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Qty {part.qty} × {currency(part.price)}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <p className="font-semibold">{currency(lineTotal)}</p>
-
-                      {canEdit && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="rounded-xl text-destructive hover:text-destructive"
-                          disabled={saving || deletingIndex !== null}
-                          aria-label={`Remove ${part.partName}`}
-                          onClick={() => {
-                            const confirmed = window.confirm(
-                              `Remove "${part.partName}" from this job`,
-                            );
-                            if (!confirmed) {
-                              return;
-                            }
-                            handleRemovePart(index);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between rounded-2xl dark:bg-background px-4 py-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Calculator className="h-4 w-4" />
-            Parts total
-          </div>
-
-          <span className="font-semibold">{currency(totalPartsAmount)}</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          *Parts added here will be included automatically in the final invoice
-          when the job is completed.
+        <CardTitle className="flex items-center gap-2">
+          <PackagePlus className="size-5" /> Service parts
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Save parts used during this service. The running bill updates
+          automatically.
         </p>
-
-        {canEdit && !showForm && (
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!partsUsed.length && (
+          <p className="text-sm text-muted-foreground">No parts added.</p>
+        )}
+        {partsUsed.map((part, index) => (
+          <article
+            key={part.partId || index}
+            className="min-w-0 space-y-2 rounded-xl border p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="break-words font-medium">{part.partName}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {part.qty} × {currency(part.price)}
+                </p>
+              </div>
+              <p className="font-semibold tabular-nums">
+                {currency(
+                  part.price == null ? undefined : part.qty * part.price,
+                )}
+              </p>
+            </div>
+            {part.note && (
+              <p className="break-words text-xs text-muted-foreground">
+                {part.note}
+              </p>
+            )}
+            {part.source !== "on_site" ? (
+              <p className="text-xs text-muted-foreground">
+                Earlier draft part. Your provider manages its quote review.
+              </p>
+            ) : (
+              canEdit && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => edit(part)}
+                  >
+                    <Pencil className="size-3" /> Change quantity
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void save("remove", part)}
+                  >
+                    <Trash2 className="size-3" /> Remove
+                  </Button>
+                </div>
+              )
+            )}
+          </article>
+        ))}
+        {canEdit && !form && (
           <Button
             type="button"
             variant="outline"
-            className="w-full rounded-xl"
-            onClick={() => setShowForm(true)}
-            disabled={saving || deletingIndex !== null}
+            className="min-h-11 w-full"
+            disabled={busy}
+            onClick={() => edit()}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Part
+            <Plus className="size-4" /> Add Part
           </Button>
         )}
-
-        {showForm && canEdit && (
-          <div className="rounded-2xl border bg-background p-4">
+        {form && canEdit && (
+          <form
+            className="space-y-4 rounded-xl border p-4"
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              void save(
+                form === "new" ? "add" : "update",
+                form === "new" ? undefined : form,
+              );
+            }}
+          >
+            {form === "new" && (
+              <label className="block space-y-2 text-sm">
+                <span>Catalog part</span>
+                <select
+                  className="h-10 w-full rounded-md border bg-background px-2"
+                  value={catalogId}
+                  onChange={(event) => {
+                    const id = event.target.value,
+                      part = catalog.data?.items.find(
+                        (item) => item._id === id,
+                      );
+                    setCatalogId(id);
+                    setPartName(part?.name || "");
+                    setPrice(part ? String(part.price) : "");
+                  }}
+                >
+                  <option value="">Enter a part manually</option>
+                  {catalog.data?.items.map((part) => (
+                    <option key={part._id} value={part._id}>
+                      {part.name} · {currency(part.price)}
+                      {part.unit ? ` / ${part.unit}` : ""}
+                    </option>
+                  ))}
+                </select>
+                {catalog.isError && (
+                  <span className="block text-xs text-muted-foreground">
+                    Catalog unavailable. You can enter the part name and price.
+                  </span>
+                )}
+              </label>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="part-name">Part name</Label>
+              <Input
+                id="part-name"
+                required
+                maxLength={300}
+                value={partName}
+                readOnly={Boolean(catalogId) || form !== "new"}
+                onChange={(event) => setPartName(event.target.value)}
+              />
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <Label htmlFor="part-name">Part name</Label>
-
-                <Input
-                  id="part-name"
-                  value={partName}
-                  onChange={(e) => setPartName(e.target.value)}
-                  placeholder="e.g. Capacitor"
-                  className="mt-2 rounded-xl"
-                />
-              </div>
-
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="part-qty">Quantity</Label>
-
                 <Input
                   id="part-qty"
                   type="number"
-                  min="1"
-                  step="1"
+                  required
+                  min="0"
+                  max="1000000"
+                  step="any"
                   value={qty}
-                  onChange={(e) => setQty(e.target.value)}
-                  className="mt-2 rounded-xl"
+                  onChange={(event) => setQty(event.target.value)}
                 />
               </div>
-
-              <div>
-                <Label htmlFor="part-price">Unit price</Label>
-
+              <div className="space-y-2">
+                <Label htmlFor="part-price">Unit price (₹)</Label>
                 <Input
                   id="part-price"
                   type="number"
+                  required
                   min="0"
+                  max="10000000"
                   step="0.01"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="mt-2 rounded-xl"
+                  readOnly={Boolean(catalogId) || form !== "new"}
+                  onChange={(event) => setPrice(event.target.value)}
                 />
               </div>
             </div>
-
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            {form === "new" && (
+              <div className="space-y-2">
+                <Label htmlFor="part-note">Reason or note (optional)</Label>
+                <Input
+                  id="part-note"
+                  maxLength={500}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </div>
+            )}
+            <p className="text-sm">
+              Line total{" "}
+              <strong>
+                {qty.trim() && price.trim()
+                  ? currency(Number(qty) * Number(price))
+                  : "—"}
+              </strong>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save part"}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-xl"
-                onClick={() => setShowForm(false)}
-                disabled={saving}
+                disabled={busy}
+                onClick={() => setForm(null)}
               >
                 Cancel
               </Button>
-
-              <Button
-                type="button"
-                className="rounded-xl "
-                onClick={handleAddPart}
-                disabled={saving}
-              >
-                {saving ? "Adding..." : "Add Part"}
-              </Button>
             </div>
-          </div>
+          </form>
         )}
       </CardContent>
     </Card>

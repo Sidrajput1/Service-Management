@@ -90,6 +90,8 @@ function update(row, value, insert = false) {
       set(row, key, item);
 }
 const unique = {
+  ServiceRequest: [["customerId", "requestKey"]],
+  JobQuote: [["jobId", "version"]],
   FinanceLedger: [["invoiceId"]],
   FinanceEvent: [["dedupeKey"], ["externalKey"]],
   CommissionPolicy: [["scope", "scopeKey", "effectiveAt"]],
@@ -197,6 +199,10 @@ export function createFinanceFixture(options = {}) {
         unset(result, hidden);
     }
     const baseline = clone(result);
+    Object.defineProperty(result, "set", {
+      enumerable: false,
+      value: (values) => Object.assign(result, values),
+    });
     Object.defineProperty(result, "save", {
       enumerable: false,
       value: async (options = {}) => {
@@ -240,6 +246,9 @@ export function createFinanceFixture(options = {}) {
         return q;
       },
       populate() {
+        return q;
+      },
+      setOptions() {
         return q;
       },
       sort(value) {
@@ -295,6 +304,8 @@ export function createFinanceFixture(options = {}) {
     "Invoice",
     "Booking",
     "Job",
+    "JobQuote",
+    "JobPartEvent",
     "Payment",
     "Customer",
     "Technician",
@@ -319,6 +330,7 @@ export function createFinanceFixture(options = {}) {
           query(name, () =>
             clone(table(name).find((row) => equal(row._id, id)) || null),
           ),
+        init: async () => {},
         findOne: (filter) =>
           query(name, () =>
             clone(table(name).find((row) => matches(row, filter)) || null),
@@ -601,6 +613,8 @@ export function createFinanceFixture(options = {}) {
     invoice: "Invoice",
     booking: "Booking",
     job: "Job",
+    "job-quote": "JobQuote",
+    "job-part-event": "JobPartEvent",
     payment: "Payment",
     customer: "Customer",
     technician: "Technician",
@@ -754,6 +768,7 @@ export function createFinanceFixture(options = {}) {
       serviceOfferingId: offeringId,
       status: "assigned",
       serviceType: "Fixture service",
+      pricing: { finalPrice: 1000, taxPercent: 0 },
       commissionSnapshot: {
         state: "ready",
         policyId,

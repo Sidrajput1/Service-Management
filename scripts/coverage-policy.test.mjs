@@ -241,6 +241,7 @@ async function fixture() {
     "@/lib/location-validation": locationValidation,
     "@/lib/service-offering-price": pricing,
     "@/lib/service-offering-offer": { isOfferCurrentlyActive: () => false },
+    "@/lib/booking-request-notifications": { notifyNewServiceRequest: async () => {} },
   };
   const eligibility = await load("../lib/booking-eligibility.ts", {
     ...common,

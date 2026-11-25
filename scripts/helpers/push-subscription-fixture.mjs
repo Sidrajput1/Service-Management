@@ -217,6 +217,8 @@ export function createPushFixture() {
       }),
   };
   const User = {
+    findOne: (filter) =>
+      new Query(() => state.users.find((row) => matches(row, filter)) || null),
     updateOne: (filter, update) =>
       new Query(() => {
         const row = state.users.find((r) => matches(r, filter));

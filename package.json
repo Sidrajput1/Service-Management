@@ -25,7 +25,13 @@
     "finance:migrate": "node scripts/migrate-finance.mjs",
     "finance:maintenance": "node scripts/finance-maintenance.mjs",
     "test:push": "node --test scripts/push-subscriptions.test.mjs scripts/push-client.test.mjs scripts/push-worker.test.mjs scripts/push-delivery.test.mjs",
-    "push:migrate": "node scripts/migrate-push.mjs"
+    "push:migrate": "node scripts/migrate-push.mjs",
+    "passwords:migrate": "node scripts/migrate-password-security.mjs",
+    "test:passwords": "node --test scripts/password-management.test.mjs scripts/password-sessions.test.mjs scripts/password-ui.test.mjs",
+    "test:job-phase1": "node --test scripts/job-phase1.test.mjs scripts/technician-job-api.test.mjs",
+    "test:job-phase1:mongo": "node --test scripts/job-phase1-mongo.test.mjs",
+    "test:job-phase2": "node --test scripts/job-phase2.test.mjs",
+    "test:job-onsite": "node --test scripts/job-onsite-parts.test.mjs"
   },
   "type": "module",
   "dependencies": {
@@ -56,6 +62,7 @@
     "react-hook-form": "^7.71.2",
     "react-resizable-panels": "^4.7.3",
     "recharts": "^2.15.4",
+    "resend": "^6.38.0",
     "shadcn": "^4.0.8",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",

@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import ts from "typescript";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import * as credentialSessionPolicy from "../lib/credential-session-policy.mjs";
 
 const require = createRequire(import.meta.url);
 const { NextRequest } = require("next/server");
@@ -212,6 +213,12 @@ for (const role of ["customer", "technician", "service_provider", "admin"]) {
       "@/lib/db": { connectToDb: async () => {} },
       "@/models/user": User,
       "@/models/otp": {},
+      "@/lib/credential-session": load("lib/credential-session.ts", {
+        "server-only": {},
+        "@/lib/db": { connectToDb: async () => {} },
+        "@/models/user": User,
+        "@/lib/credential-session-policy.mjs": credentialSessionPolicy,
+      }),
       "@/lib/push-session": {
         deactivatePushSession: async () => {},
         newPushSessionId: () => "<private test binding>",
@@ -269,6 +276,10 @@ test("the existing proxy still protects all four workspaces and accepts their ma
   let token = null;
   const { proxy } = load("proxy.ts", {
     "next-auth/jwt": { getToken: async () => token },
+    "@/lib/credential-session": {
+      currentCredentialAccount: async (identity) =>
+        identity?.id ? { role: identity.role, credentialVersion: 0 } : null,
+    },
     "@/lib/role-route": load("lib/role-route.ts"),
     "@/lib/booking-redirect": load("lib/booking-redirect.ts"),
   });
@@ -286,10 +297,14 @@ test("the existing proxy still protects all four workspaces and accepts their ma
       new URL(anonymous.headers.get("Location")).pathname,
       "/signin",
     );
-    token = { role };
+    token = { id: "a".repeat(24), role, credentialVersion: 0 };
     const allowed = await proxy(request);
     assert.equal(allowed.headers.get("x-middleware-next"), "1");
-    token = { role: role === "admin" ? "customer" : "admin" };
+    token = {
+      id: "a".repeat(24),
+      role: role === "admin" ? "customer" : "admin",
+      credentialVersion: 0,
+    };
     assert.equal((await proxy(request)).status, 307);
   }
 });

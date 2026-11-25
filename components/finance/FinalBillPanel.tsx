@@ -6,6 +6,9 @@ import { Receipt, ShieldCheck } from "lucide-react";
 import { useFinanceQuery, useFinanceAction } from "@/hooks/useFinance";
 import { Button } from "@/components/ui/button";
 import type { FinalBill } from "@/lib/finance-types";
+import { InvoiceBreakdown } from "@/components/invoice/InvoiceBreakdown";
+import CustomerPayBtn from "@/components/payments/CustomerPayBtn";
+import type { CustomerIdentity } from "@/lib/customer-types";
 import {
   FinanceState,
   financeMoney,
@@ -13,13 +16,19 @@ import {
   paymentLabels,
   fieldClass,
 } from "./FinanceUi";
-export function FinalBillPanel({ invoiceId }: { invoiceId: string }) {
+export function FinalBillPanel({
+  invoiceId,
+  checkout,
+}: {
+  invoiceId: string;
+  checkout?: { customer: CustomerIdentity; disabled?: boolean };
+}) {
   const { data: session } = useSession(),
     query = useFinanceQuery<{ bill: FinalBill }>(
       `/finance/invoices/${invoiceId}`,
     ),
     mutation = useFinanceAction(`/finance/invoices/${invoiceId}`);
-  const [mode, setMode] = useState("cash"),
+  const [modeOverride, setMode] = useState<string | null>(null),
     [collected, setCollected] = useState(false),
     [paidDirectly, setPaidDirectly] = useState(false),
     [reason, setReason] = useState(""),
@@ -29,6 +38,7 @@ export function FinalBillPanel({ invoiceId }: { invoiceId: string }) {
     team = ["technician", "service_provider", "admin"].includes(
       session?.user.role || "",
     );
+  const mode = modeOverride ?? bill?.paymentMode ?? "cash";
   async function send(body: Record<string, unknown>) {
     try {
       await mutation.mutateAsync(body);
@@ -45,8 +55,9 @@ export function FinalBillPanel({ invoiceId }: { invoiceId: string }) {
   }
   return (
     <section
+      id={checkout ? "final-bill" : undefined}
       aria-label="Final bill confirmation"
-      className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6"
+      className="min-w-0 scroll-mt-24 space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6"
     >
       <div className="flex items-center gap-3">
         <span className="rounded-xl bg-primary/10 p-2.5 text-primary">
@@ -87,21 +98,32 @@ export function FinalBillPanel({ invoiceId }: { invoiceId: string }) {
               {bill.billState.replaceAll("_", " ")}
             </p>
           </div>
-          <dl className="space-y-2 text-sm">
-            {bill.items.map((item, index) => (
-              <div key={index} className="flex justify-between gap-4">
-                <dt className="min-w-0 break-words text-muted-foreground">
-                  {item.description} × {item.qty}
-                </dt>
-                <dd className="shrink-0">
-                  {financeMoney(Math.round(item.amount * 100))}
-                </dd>
+          {customer &&
+            checkout &&
+            !checkout.disabled &&
+            bill.canPayOnline &&
+            !query.isError && (
+              <div className="space-y-3 rounded-xl border border-primary/25 bg-primary/5 p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-semibold">Online payment due</h3>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {financeMoney(Math.round(bill.balanceDue * 100))}
+                  </p>
+                </div>
+                <CustomerPayBtn
+                  invoiceId={invoiceId}
+                  disabled={mutation.isPending || query.isFetching}
+                  customerName={checkout.customer.name}
+                  customerEmail={checkout.customer.email}
+                  customerPhone={checkout.customer.phone}
+                />
               </div>
-            ))}
-            <div className="flex justify-between border-t border-border pt-2">
-              <dt>Tax</dt>
-              <dd>{financeMoney(Math.round(bill.taxAmount * 100))}</dd>
-            </div>
+            )}
+          <InvoiceBreakdown
+            breakdown={bill.breakdown}
+            currency={bill.currency}
+          />
+          <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-3">
               <dt>Payment status</dt>
               <dd>{bill.paymentState.replaceAll("_", " ")}</dd>
@@ -153,140 +175,166 @@ export function FinalBillPanel({ invoiceId }: { invoiceId: string }) {
             </p>
           )}
           {team &&
+            (!bill.completionBilling ||
+              ["cash", "direct_upi"].includes(bill.paymentMode || "")) &&
             (["not_submitted", "pending"].includes(bill.billState) ||
               (bill.billState === "confirmed" &&
                 bill.paymentState === "unpaid")) && (
-              <form
-                className="space-y-4 border-t border-border pt-5"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void send({
-                    action: "submit",
-                    invoiceVersion: bill.invoiceVersion,
-                    paymentMode:
-                      bill.paymentState === "paid" &&
-                      bill.paymentMode === "servizato_online"
-                        ? "servizato_online"
-                        : mode,
-                    collectedPaise:
-                      mode !== "servizato_online" &&
-                      collected &&
-                      !(
+              <details
+                open={!bill.completionBilling}
+                className="border-t border-border pt-5"
+              >
+                <summary className="cursor-pointer text-sm font-semibold">
+                  {bill.completionBilling
+                    ? "Update direct payment report"
+                    : "Payment details"}
+                </summary>
+                <form
+                  className="space-y-4 border-t border-border pt-5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void send({
+                      action: "submit",
+                      invoiceVersion: bill.invoiceVersion,
+                      paymentMode:
                         bill.paymentState === "paid" &&
                         bill.paymentMode === "servizato_online"
-                      )
-                        ? bill.grossPaise
-                        : 0,
-                  });
-                }}
-              >
-                <p className="text-sm font-semibold">
-                  Submit the final bill for customer review
-                </p>
-                <label className="block space-y-2 text-sm">
-                  <span>Payment method</span>
-                  <select
-                    value={
-                      bill.paymentState === "paid" &&
-                      bill.paymentMode === "servizato_online"
-                        ? "servizato_online"
-                        : mode
-                    }
-                    disabled={
-                      mutation.isPending ||
-                      (bill.paymentMode === "servizato_online" &&
-                        bill.paymentState === "paid")
-                    }
-                    onChange={(event) => {
-                      setMode(event.target.value);
-                      setCollected(false);
-                    }}
-                    className={fieldClass}
+                          ? "servizato_online"
+                          : mode,
+                      collectedPaise:
+                        mode !== "servizato_online" &&
+                        collected &&
+                        !(
+                          bill.paymentState === "paid" &&
+                          bill.paymentMode === "servizato_online"
+                        )
+                          ? bill.grossPaise
+                          : 0,
+                    });
+                  }}
+                >
+                  <p className="text-sm font-semibold">
+                    Record payment details
+                  </p>
+                  <label className="block space-y-2 text-sm">
+                    <span>Payment method</span>
+                    <select
+                      value={
+                        bill.paymentState === "paid" &&
+                        bill.paymentMode === "servizato_online"
+                          ? "servizato_online"
+                          : mode
+                      }
+                      disabled={
+                        mutation.isPending ||
+                        (bill.paymentMode === "servizato_online" &&
+                          bill.paymentState === "paid")
+                      }
+                      onChange={(event) => {
+                        setMode(event.target.value);
+                        setCollected(false);
+                      }}
+                      className={fieldClass}
+                    >
+                      {Object.entries(paymentLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {mode !== "servizato_online" &&
+                    bill.paymentState !== "paid" && (
+                      <label className="flex items-start gap-3 text-sm leading-6">
+                        <input
+                          type="checkbox"
+                          checked={collected}
+                          disabled={mutation.isPending}
+                          onChange={(event) =>
+                            setCollected(event.target.checked)
+                          }
+                          className="mt-1 size-4 shrink-0 accent-primary"
+                        />
+                        <span>
+                          Our team has collected the full{" "}
+                          {financeMoney(bill.grossPaise)} directly from the
+                          customer.
+                        </span>
+                      </label>
+                    )}
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    Submitting a bill does not confirm payment. The customer
+                    reviews direct-payment details. Razorpay confirms online
+                    funds. Completed bill changes need an admin review.
+                  </p>
+                  <Button
+                    type="submit"
+                    disabled={mutation.isPending || query.isFetching}
+                    className="min-h-11 w-full"
                   >
-                    {Object.entries(paymentLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {mode !== "servizato_online" &&
-                  bill.paymentState !== "paid" && (
-                    <label className="flex items-start gap-3 text-sm leading-6">
-                      <input
-                        type="checkbox"
-                        checked={collected}
-                        disabled={mutation.isPending}
-                        onChange={(event) => setCollected(event.target.checked)}
-                        className="mt-1 size-4 shrink-0 accent-primary"
-                      />
-                      <span>
-                        Our team has collected the full{" "}
-                        {financeMoney(bill.grossPaise)} directly from the
-                        customer.
-                      </span>
-                    </label>
-                  )}
-                <p className="text-xs leading-6 text-muted-foreground">
-                  Submitting a bill does not confirm payment. The customer
-                  reviews direct-payment details. Razorpay confirms online
-                  funds. Completed bill changes need an admin review.
-                </p>
+                    {mutation.isPending ? "Saving…" : "Save payment details"}
+                  </Button>
+                </form>
+              </details>
+            )}
+          {customer &&
+            bill.billState === "pending" &&
+            !(
+              bill.completionBilling &&
+              bill.paymentMode === "servizato_online" &&
+              bill.invoiceVersion === 1
+            ) && (
+              <div className="space-y-4 border-t border-border pt-5">
+                {checkout && bill.paymentMode === "servizato_online" && (
+                  <p className="text-sm text-muted-foreground">
+                    Confirm the bill to pay securely through Servizato.
+                  </p>
+                )}
+                {["cash", "direct_upi"].includes(bill.paymentMode || "") && (
+                  <label className="flex items-start gap-3 text-sm leading-6">
+                    <input
+                      type="checkbox"
+                      checked={paidDirectly}
+                      disabled={mutation.isPending}
+                      onChange={(event) =>
+                        setPaidDirectly(event.target.checked)
+                      }
+                      className="mt-1 size-4 shrink-0 accent-primary"
+                    />
+                    <span>
+                      I paid {financeMoney(bill.grossPaise)} directly to the
+                      service team. Leave this unchecked if you have not paid.
+                    </span>
+                  </label>
+                )}
                 <Button
-                  type="submit"
                   disabled={mutation.isPending || query.isFetching}
                   className="min-h-11 w-full"
+                  onClick={() =>
+                    void send({
+                      action: "confirm",
+                      invoiceVersion: bill.invoiceVersion,
+                      grossPaise: bill.grossPaise,
+                      paymentMode: bill.paymentMode,
+                      directPaymentReceived:
+                        ["cash", "direct_upi"].includes(
+                          bill.paymentMode || "",
+                        ) && paidDirectly,
+                    })
+                  }
                 >
+                  <ShieldCheck className="mr-2 size-4" />
                   {mutation.isPending
                     ? "Saving…"
-                    : "Submit bill for confirmation"}
+                    : "Confirm bill and payment details"}
                 </Button>
-              </form>
+                <p className="text-xs leading-6 text-muted-foreground">
+                  If your payment report differs from the service team’s report,
+                  the record goes for review. Confirming an online bill does not
+                  mark it paid.
+                </p>
+              </div>
             )}
-          {customer && bill.billState === "pending" && (
-            <div className="space-y-4 border-t border-border pt-5">
-              {["cash", "direct_upi"].includes(bill.paymentMode || "") && (
-                <label className="flex items-start gap-3 text-sm leading-6">
-                  <input
-                    type="checkbox"
-                    checked={paidDirectly}
-                    disabled={mutation.isPending}
-                    onChange={(event) => setPaidDirectly(event.target.checked)}
-                    className="mt-1 size-4 shrink-0 accent-primary"
-                  />
-                  <span>
-                    I paid {financeMoney(bill.grossPaise)} directly to the
-                    service team. Leave this unchecked if you have not paid.
-                  </span>
-                </label>
-              )}
-              <Button
-                disabled={mutation.isPending || query.isFetching}
-                className="min-h-11 w-full"
-                onClick={() =>
-                  void send({
-                    action: "confirm",
-                    invoiceVersion: bill.invoiceVersion,
-                    grossPaise: bill.grossPaise,
-                    paymentMode: bill.paymentMode,
-                    directPaymentReceived:
-                      ["cash", "direct_upi"].includes(bill.paymentMode || "") &&
-                      paidDirectly,
-                  })
-                }
-              >
-                <ShieldCheck className="mr-2 size-4" />
-                {mutation.isPending
-                  ? "Saving…"
-                  : "Confirm bill and payment details"}
-              </Button>
-              <p className="text-xs leading-6 text-muted-foreground">
-                If your payment report differs from the service team’s report,
-                the record goes for review. Confirming an online bill does not
-                mark it paid.
-              </p>
-            </div>
-          )}
           {customer && bill.billState === "not_submitted" && (
             <p className="text-sm text-muted-foreground">
               Your service team has not submitted the payment details yet. Your

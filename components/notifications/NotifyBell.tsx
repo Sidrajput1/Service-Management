@@ -11,6 +11,7 @@ import {
 import {
   notificationBadge,
   safeNotificationLink,
+  invoicePaymentNotificationLink,
 } from "@/lib/notification-client.mjs";
 import { Button } from "@/components/ui/button";
 import {
@@ -98,7 +99,7 @@ export default function NotifyBell() {
               key={item._id}
               render={
                 <Link
-                  href={safeNotificationLink(
+                  href={invoicePaymentNotificationLink(item, session?.user?.role) || safeNotificationLink(
                     item.actionUrl,
                     session?.user?.role,
                   )}

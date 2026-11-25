@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+
 import { ArrowRight, CalendarCheck2, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { authHref, safeBookingDestination } from "@/lib/booking-redirect";
 import { getRoleHome } from "@/lib/role-route";
+import { useSession } from "next-auth/react";
 
 export function BookingButton({ destination, serviceName, className = "", label = "Book service" }: {
   destination: string; serviceName?: string; className?: string; label?: string;

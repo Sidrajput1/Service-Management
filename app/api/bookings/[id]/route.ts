@@ -74,19 +74,27 @@ export async function PUT(request: Request, { params }:  { params: Promise<{ id:
     const current = await Booking.findById(id);
     if (!current) return NextResponse.json({error:"Booking not found"},{status:404});
     if (current.status === "cancelled" || await Job.exists({bookingId:current._id,status:{$in:["enroute","arrived","otp_verified","in_progress","on_hold","completed"]}})) return NextResponse.json({error:"This booking is locked by its job history. Use the review process for changes."},{status:409});
+    const changesReservation =
+      (parsed.scheduledAt != null && Date.parse(parsed.scheduledAt) !== Number(current.scheduledAt)) ||
+      (parsed.status !== undefined && parsed.status !== current.status);
+    const changesEstimate = parsed.estimatedPrice !== undefined && parsed.estimatedPrice !== current.estimatedPrice;
+    if (parsed.status === "assigned" && current.status !== "assigned")
+      return NextResponse.json({ error: "Use the job assignment workflow to reserve a Pro." }, { status: 409 });
+    if ((changesReservation || changesEstimate) && (current.status === "assigned" || current.technicianId))
+      return NextResponse.json({ error: "Use the job assignment or quote workflow to change a reserved booking's time or payable amount." }, { status: 409 });
     const changes = {...parsed}; delete changes.cancellationReason; delete changes.cancellationNote; delete changes.requestId;
 
-    const booking = await Booking.findByIdAndUpdate(
-      id,
+    const booking = await Booking.findOneAndUpdate(
+      { _id: id, status: current.status, __v: current.__v, ...(changesReservation || changesEstimate ? { technicianId: null } : {}) },
       {
-        ...changes,
-        scheduledAt: parsed.scheduledAt ? new Date(parsed.scheduledAt) : undefined,
+        $set: { ...changes, scheduledAt: parsed.scheduledAt ? new Date(parsed.scheduledAt) : undefined },
+        $inc: { __v: 1 },
       },
       { new: true }
     );
 
     if (!booking) {
-      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+      return NextResponse.json({ error: "Booking changed. Refresh before saving." }, { status: 409 });
     }
 
     return NextResponse.json({ booking });

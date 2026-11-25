@@ -1,119 +1,41 @@
 import { requireRole } from "@/lib/auth";
-import { apiFailure } from "@/lib/api-response";
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { requireTechnicianProfile } from "@/lib/technician";
+import {
+  changeAssignedJobPart,
+  changeJobPartSchema,
+  removeJobPartSchema,
+} from "@/lib/job-parts";
 
-import { authOptions } from "@/lib/auth-options";
-import { connectToDb } from "@/lib/db";
-
-import { Technician } from "@/models/index";
-import Job from "@/models/job";
-
-export const runtime = "nodejs";
-
-export async function DELETE(
-  _request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{
-      id: string;
-      partIndex: string;
-    }>;
-  },
-) {
+type Context = { params: Promise<{ id: string; partIndex: string }> };
+export async function PATCH(request: Request, { params }: Context) {
   try {
     await requireRole(["technician"]);
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized",
-        },
-        {
-          status: 401,
-        },
-      );
-    }
-
-    await connectToDb();
-
-    const technician = await Technician.findOne({
-      userId: session.user.id,
-      isActive: true,
-    });
-
-    if (!technician) {
-      return NextResponse.json(
-        {
-          error: "Technician profile not found",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
+    const { tech, user } = await requireTechnicianProfile();
     const { id, partIndex } = await params;
-
-    const index = Number(partIndex);
-
-    if (!Number.isInteger(index) || index < 0) {
-      return NextResponse.json(
-        {
-          error: "Invalid part index",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    const job = await Job.findOne({
-      _id: id,
-      technicianId: technician._id,
-
-      status: {
-        $in: ["otp_verified", "in_progress", "on_hold"],
-      },
-    });
-
-    if (!job) {
-      return NextResponse.json(
-        {
-          error: "Job not found or cannot be modified",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
-    const parts = Array.isArray(job.partsUsed) ? [...job.partsUsed] : [];
-
-    if (index >= parts.length) {
-      return NextResponse.json(
-        {
-          error: "Part not found",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
-    parts.splice(index, 1);
-
-    job.partsUsed = parts as any;
-
-    await job.save();
-
-    return NextResponse.json({
-      success: true,
-
-      partsUsed: job.partsUsed,
-    });
+    return privateJson(
+      await changeAssignedJobPart(id, String(tech._id), user, {
+        action: "part_updated",
+        partId: partIndex,
+        input: changeJobPartSchema.parse(await request.json()),
+      }),
+    );
+  } catch (error) {
+    return apiFailure(error);
+  }
+}
+export async function DELETE(request: Request, { params }: Context) {
+  try {
+    await requireRole(["technician"]);
+    const { tech, user } = await requireTechnicianProfile();
+    const { id, partIndex } = await params;
+    return privateJson(
+      await changeAssignedJobPart(id, String(tech._id), user, {
+        action: "part_removed",
+        partId: partIndex,
+        input: removeJobPartSchema.parse(await request.json()),
+      }),
+    );
   } catch (error) {
     return apiFailure(error);
   }

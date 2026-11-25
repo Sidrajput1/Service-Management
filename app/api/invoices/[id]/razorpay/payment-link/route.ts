@@ -1,93 +1,82 @@
+import { ApiAuthError, requireRole } from "@/lib/auth";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { objectIdSchema } from "@/lib/pagination";
+import {
+  createRazorpayPaymentLink,
+  findRazorpayPaymentLink,
+  getRazorpayPaymentLink,
+} from "@/lib/razorpay";
+import { saveCheckoutChannel } from "@/lib/invoice-online-payment";
+import Invoice from "@/models/invoice";
+import Customer from "@/models/customer";
+
 export const runtime = "nodejs";
 
-import { requireRole } from "@/lib/auth";
-import { connectToDb } from "@/lib/db";
-import { createRazorpayPaymentLink } from "@/lib/razorpay";
-import Invoice from "@/models/invoice";
-import { NextResponse } from "next/server";
-import { canPayInvoice } from "@/lib/access-policy.mjs";
-import { FinanceLedger } from "@/models/finance";
-
-export async function POST(_: Request, { params }:  { params: Promise<{ id: string }> }) {
+export async function POST(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     await requireRole(["admin", "dispatcher"]);
-
-    await connectToDb();
-
-    const {id} = await params;
-    const invoice = await Invoice.findById(id)
-      .populate("jobId")
-      .populate("customerId")
-      .populate("bookingId");
-
-    if (!invoice) {
-      return NextResponse.json(
-        {
-          error: "Invoice not found",
-        },
-        { status: 404 },
-      );
+    const id = objectIdSchema.parse((await params).id);
+    const invoice = await Invoice.findById(id);
+    if (!invoice) return privateJson({ error: "Invoice not found" }, 404);
+    const payable = await saveCheckoutChannel(invoice, "payment_link", true);
+    const amount = Math.round(Number(payable.balanceDue) * 100);
+    const currency = payable.currency || "INR";
+    const reference = String(payable._id);
+    let link;
+    if (payable.razorpayPaymentLinkId) {
+      link = await getRazorpayPaymentLink(payable.razorpayPaymentLinkId);
+    } else {
+      const customer = await Customer.findById(payable.customerId)
+        .select("name email phone")
+        .lean();
+      try {
+        link = await createRazorpayPaymentLink({
+          amountPaise: amount,
+          currency,
+          description: `Invoice ${payable.invoiceNumber}`,
+          reference_id: reference,
+          customer: {
+            name: customer?.name,
+            email: customer?.email,
+            contact: customer?.phone,
+          },
+          notes: {
+            invoiceId: reference,
+            jobId: String(payable.jobId || ""),
+            bookingId: String(payable.bookingId || ""),
+          },
+        });
+      } catch (error) {
+        link = await findRazorpayPaymentLink(reference);
+        if (!link) throw error;
+      }
     }
-
-    if (!canPayInvoice(invoice) || await FinanceLedger.exists({invoiceId:invoice._id,billState:"disputed"})) {
-      return NextResponse.json(
-        {
-          error: "This invoice is paid, refunded, closed or under review and cannot start a new payment.",
-        },
-        { status: 400 },
-      );
-    }
-
-    if (invoice.razorpayPaymentLinkId) {
-      return NextResponse.json({
-        paymentLinkId: invoice.razorpayPaymentLinkId,
-        shortUrl: invoice.metadata?.razorpayShortUrl || null,
-      });
-    }
-
-    const customer = invoice.customerId as any;
-
-    const booking = invoice.bookingId as any;
-
-    const paymentLink = await createRazorpayPaymentLink({
-      amountPaise: Math.round(
-        Number(invoice.balanceDue || invoice.grandTotal || 0) * 100,
-      ),
-      currency: "INR",
-      description: `Invoice ${invoice.invoiceNumber}`,
-      reference_id: invoice._id.toString(),
-      customer: {
-        name: customer?.name,
-        email: customer?.email,
-        contact: customer?.phone,
-      },
-      notes: {
-        invoiceId: invoice._id.toString(),
-        jobId: invoice.jobId ? String(invoice.jobId) : "",
-        bookingId: booking?._id ? String(booking._id) : "",
+    if (
+      link.amount !== amount ||
+      link.currency !== currency ||
+      link.amount_paid ||
+      link.status !== "created" ||
+      link.reference_id !== reference
+    )
+      throw new ApiAuthError("This payment link needs a billing review.", 409);
+    await saveCheckoutChannel(payable, "payment_link", true, {
+      id: link.id,
+      metadata: {
+        ...payable.metadata,
+        razorpayShortUrl: link.short_url,
+        razorpayRawPaymentLink: link,
       },
     });
-
-    invoice.razorpayPaymentLinkId = paymentLink.id;
-    invoice.metadata = {
-      ...(invoice.metadata || {}),
-      razorpayShortUrl: paymentLink.short_url,
-      razorpayRawPaymentLink: paymentLink,
-    };
-    await invoice.save();
-
-    return NextResponse.json({
-      paymentLinkId: paymentLink.id,
-      shortUrl: paymentLink.short_url,
-      amount: paymentLink.amount,
-      currency: paymentLink.currency,
+    return privateJson({
+      paymentLinkId: link.id,
+      shortUrl: link.short_url,
+      amount: link.amount,
+      currency: link.currency,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Internal Server Error",
-      },
-      { status: 500 },
-    );
+    return apiFailure(error);
   }
 }

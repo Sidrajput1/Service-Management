@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ServiceWindowFields, enteredServiceWindow, localServiceTime, type ServiceWindowInput } from "@/components/technicians/ServiceWindowFields";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -44,6 +46,7 @@ export default function ProviderBookingDetailPage() {
   const router = useRouter();
 
   const bookingId = String(params.id);
+  const [windowInput, setWindowInput] = useState<ServiceWindowInput>();
 
   const { data, isLoading, isError } = useProviderBooking(bookingId);
 
@@ -98,10 +101,22 @@ export default function ProviderBookingDetailPage() {
   const pricing = booking.pricing;
 
   const assignedPro = booking.technicianId;
+  const serviceWindow = windowInput ?? {
+    start: localServiceTime(booking.scheduledAt || booking.timeWindow?.from),
+    end: localServiceTime(booking.timeWindow?.to),
+  };
 
   async function handleAssign(technicianId: string) {
     try {
-      await assignPro.mutateAsync(technicianId);
+      const schedule = enteredServiceWindow(serviceWindow, {
+        scheduledAt: booking.scheduledAt,
+        scheduledEndAt: booking.timeWindow?.to,
+      });
+      await assignPro.mutateAsync({
+        technicianId,
+        ...schedule,
+        scheduledAt: booking.scheduledAt ? undefined : schedule.scheduledAt,
+      });
 
       toast.success("Pro assigned successfully");
     } catch (error: any) {
@@ -314,6 +329,9 @@ export default function ProviderBookingDetailPage() {
             </CardHeader>
 
             <CardContent className="space-y-3">
+              {booking.status === "confirmed" && technicians.length > 0 && (
+                <ServiceWindowFields value={serviceWindow} onChange={setWindowInput} fixedStart={Boolean(booking.scheduledAt)} />
+              )}
               {technicians.length === 0 ? (
                 <div className="rounded-2xl border border-dashed p-6 text-center">
                   <UsersIcon />
@@ -383,16 +401,17 @@ export default function ProviderBookingDetailPage() {
                         className="mt-4 w-full rounded-xl"
                         variant={isBusy ? "outline" : "default"}
                         disabled={
-                          isBusy ||
+                          technician.status === "on_leave" ||
                           assignPro.isPending ||
+                          !serviceWindow.start || !serviceWindow.end ||
                           booking.status === "assigned"
                         }
                         onClick={() => handleAssign(technician._id)}
                       >
                         {booking.status === "assigned"
                           ? "Pro Assigned"
-                          : isBusy
-                            ? "Currently Busy"
+                          : technician.status === "on_leave"
+                            ? "On leave"
                             : "Assign Pro"}
                       </Button>
                     </div>

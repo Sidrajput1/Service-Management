@@ -5,8 +5,6 @@ import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
-  FileText,
-  IndianRupee,
   MapPin,
   UserRound,
   Wrench,
@@ -15,6 +13,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 import api from "@/lib/api";
+import { InvoiceBreakdown } from "@/components/invoice/InvoiceBreakdown";
+import { paymentLabels } from "@/lib/payment-methods";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -80,6 +80,7 @@ export default function ProviderInvoiceDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      {invoice.paymentMethod && <p className="text-sm text-muted-foreground">Payment method · {paymentLabels[invoice.paymentMethod] || invoice.paymentMethod}</p>}
       <Button asChild variant="ghost" className="-ml-3 rounded-xl">
         <Link href="/service-provider/finance/invoices">
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -107,56 +108,15 @@ export default function ProviderInvoiceDetailPage() {
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="min-w-0 space-y-6">
           <Card className="rounded-2xl">
             <CardHeader>
               <CardTitle>Invoice items</CardTitle>
             </CardHeader>
 
             <CardContent className="space-y-4">
-              {invoice.items?.map((item: any, index: number) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between gap-4 rounded-2xl border p-4"
-                >
-                  <div>
-                    <p className="font-medium">{item.description}</p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {item.itemType} · Qty {item.qty}
-                    </p>
-                  </div>
-
-                  <p className="font-semibold">{currency(item.amount)}</p>
-                </div>
-              ))}
-
-              <Separator />
-
-              <SummaryRow label="Subtotal" value={currency(invoice.subtotal)} />
-
-              {Number(invoice.discountAmount || 0) > 0 && (
-                <SummaryRow
-                  label="Discount"
-                  value={`-${currency(invoice.discountAmount)}`}
-                />
-              )}
-
-              <SummaryRow
-                label={`Tax (${invoice.taxPercent || 0}%)`}
-                value={currency(invoice.taxAmount)}
-              />
-
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">Total</span>
-
-                <span className="text-2xl font-semibold">
-                  {currency(invoice.grandTotal)}
-                </span>
-              </div>
+              <InvoiceBreakdown breakdown={data.breakdown} currency={invoice.currency} />
             </CardContent>
           </Card>
 

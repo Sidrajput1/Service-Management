@@ -549,7 +549,7 @@ test("unfunded payout adjustments and role-forged manual refund/collection comma
     );
   assert.equal(f.table("FinanceLedger")[0].payoutAdjustmentPaise, 0);
 });
-test("unpaid bill correction preserves old totals/rate in history and requires a new customer bill version", async () => {
+test("unpaid downward bill correction preserves old totals/rate in history and requires a new customer bill version", async () => {
   const f = createFinanceFixture(),
     ids = f.seed({ razorpayOrderId: undefined }),
     ledger = f.load("lib/finance-ledger.ts");
@@ -571,7 +571,7 @@ test("unpaid bill correction preserves old totals/rate in history and requires a
         itemType: "service",
         description: "Corrected supported service line",
         qty: 1,
-        unitPrice: 900,
+        unitPrice: 800,
         taxable: true,
       },
     ],
@@ -580,14 +580,14 @@ test("unpaid bill correction preserves old totals/rate in history and requires a
   });
   const changed = f.table("FinanceLedger")[0],
     event = f.table("FinanceEvent").find((row) => row.kind === "correct_bill");
-  assert.equal(changed.grossPaise, 106200);
-  assert.equal(changed.eligiblePaise, 90000);
-  assert.equal(changed.commissionPaise, 9000);
+  assert.equal(changed.grossPaise, 94400);
+  assert.equal(changed.eligiblePaise, 80000);
+  assert.equal(changed.commissionPaise, 8000);
   assert.equal(changed.snapshot.rateBps, 1000);
   assert.equal(changed.invoiceVersion, 2);
   assert.equal(changed.billState, "pending");
   assert.equal(event.details.old.grandTotal, 1000);
-  assert.equal(event.details.new.grandTotal, 1062);
+  assert.equal(event.details.new.grandTotal, 944);
   await assert.rejects(
     ledger.billAction(String(ids.invoiceId), ids.customerActor, {
       action: "confirm",
@@ -760,6 +760,8 @@ test("staff reassignment uses the booking fence and keeps the business's agreed 
     .staffAssignJob(ids.admin, {
       jobId: String(ids.jobId),
       technicianId: fixtureId(91),
+      scheduledAt: "2026-12-05T09:00:00+05:30",
+      scheduledEndAt: "2026-12-05T11:00:00+05:30",
     });
   assert.equal(result.job.status, "assigned");
   assert.equal(result.job.otp, undefined);
@@ -898,6 +900,7 @@ test("actual final-bill UI shows the saved amount and confirmation state without
       claimedCollectedPaise: 100000,
       refundedPaise: 0,
     };
+  bill.breakdown = f.load("lib/invoice-breakdown.ts").invoiceBreakdown(bill);
   const modules = {
     "next-auth/react": {
       useSession: () => ({

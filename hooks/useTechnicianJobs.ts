@@ -121,5 +121,9 @@ export function useUploadTechnicianProof() {
   );
 }
 export function useCompleteTechnicianJob() {
-  return useJobMutation("complete", (id: string) => id);
+  return useJobMutation(
+    "complete",
+    (value: { id: string; paymentMode?: string; collected?: boolean }) => value.id,
+    ({ paymentMode, collected }) => ({ paymentMode, collected }),
+  );
 }

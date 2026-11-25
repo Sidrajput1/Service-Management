@@ -2,15 +2,45 @@ import http from "http";
 import next from "next";
 
 import { Server } from "socket.io";
-import { installSocketSecurity } from "./lib/socket-server.mjs";
+//import { loadEnvConfig } from "@next/env";
+//import { installSocketSecurity } from "./lib/socket-server.mjs";
+import nextEnv from "@next/env";
+// Load .env before accessing environment variables
+// loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
+
+// console.log("[Startup Environment Check]", {
+//   hasMongoUri: Boolean(process.env.MONGODB_URI),
+//   hasResendKey: Boolean(process.env.RESEND_API_KEY),
+//   hasEmailFrom: Boolean(process.env.EMAIL_FROM),
+// });
 
 const dev = process.env.NODE_ENV !== "production";
+
+// Load environment variables before application initialization
+nextEnv.loadEnvConfig(process.cwd(), dev);
+
+// console.log("[Server startup]", {
+//   cwd: process.cwd(),
+//   nodeEnv: process.env.NODE_ENV ?? "not set",
+//   hasMongoUri: Boolean(process.env.MONGODB_URI),
+//   hasResendKey: Boolean(process.env.RESEND_API_KEY),
+//   hasEmailFrom: Boolean(process.env.EMAIL_FROM),
+// });
+
+// Load Socket.IO security after environment initialization
+const { installSocketSecurity } = await import("./lib/socket-server.mjs");
 
 const app = next({ dev, ...(dev ? { webpack: true } : {}) });
 
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
+  console.log("[After Next.js prepare]", {
+    hasMongoUri: Boolean(process.env.MONGODB_URI),
+    hasResendKey: Boolean(process.env.RESEND_API_KEY),
+    hasEmailFrom: Boolean(process.env.EMAIL_FROM),
+    pid: process.pid,
+  });
   const server = http.createServer((req, res) => handle(req, res));
 
   const io = new Server(server, {

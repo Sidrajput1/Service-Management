@@ -9,6 +9,7 @@ import Job from "@/models/job";
 import { cancelBooking, notifyCancellation } from "@/lib/booking-cancellation";
 import { requestIdSchema } from "@/lib/finance-validation";
 import { assertFinanceWrite } from "@/lib/finance-security";
+import { scheduleDateSchema } from "@/lib/job-scheduling";
 
 
 const JobUpdateSchema = z.object({
@@ -29,7 +30,7 @@ const JobUpdateSchema = z.object({
   cancellationReason: z.string().optional(),
   cancellationNote: z.string().trim().max(1000).optional(),
   requestId: requestIdSchema.optional(),
-  scheduledAt: z.string().optional().nullable(),
+  scheduledAt: scheduleDateSchema.optional().nullable(),
 });
 
 export async function GET(_: Request, { params }:  { params: Promise<{ id: string }> }) {
@@ -77,8 +78,13 @@ export async function PUT(request: Request, { params }:  { params: Promise<{ id:
       if (parsed.status !== current.status) return NextResponse.json({error:"Use the authorized job workflow to change status. OTP, proof and completion checks are required."},{status:409});
     }
 
-    const job = await Job.findByIdAndUpdate(
-      id,
+    const changingSchedule = Boolean(parsed.scheduledAt);
+    if (changingSchedule) assertFinanceWrite(request);
+    const job = await Job.findOneAndUpdate(
+      {
+        _id: id,
+        ...(changingSchedule ? { technicianId: null, status: "scheduled", scheduledEndAt: null } : {}),
+      },
       {
         ...(parsed.notes !== undefined ? { notes: parsed.notes } : {}),
         scheduledAt: parsed.scheduledAt ? new Date(parsed.scheduledAt) : undefined,
@@ -87,6 +93,8 @@ export async function PUT(request: Request, { params }:  { params: Promise<{ id:
     );
 
     if (!job) {
+      if (changingSchedule && await Job.exists({ _id: id }))
+        return NextResponse.json({ error: "Use job assignment to change a reserved service window." }, { status: 409 });
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 

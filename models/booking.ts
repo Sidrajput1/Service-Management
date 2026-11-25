@@ -55,6 +55,7 @@ export interface IBooking extends Document {
     quantity?: number;
   };
   estimatedPrice?: number;
+  paymentMethod?: "cash" | "direct_upi" | "servizato_online";
   status: "pending" | "confirmed" | "assigned" | "cancelled" | "rescheduled";
   createdBy?: mongoose.Types.ObjectId; // user who created booking
   notes?: string;
@@ -162,6 +163,7 @@ const BookingSchema = new Schema<IBooking>(
     },
 
     estimatedPrice: Number,
+    paymentMethod: { type: String, enum: ["cash", "direct_upi", "servizato_online"] },
     status: {
       type: String,
       enum: ["pending", "confirmed", "assigned", "cancelled", "rescheduled"],
@@ -176,6 +178,7 @@ const BookingSchema = new Schema<IBooking>(
 installServiceLocationPrivacy(BookingSchema);
 BookingSchema.index({ "address.location": "2dsphere" });
 BookingSchema.index({ customerId: 1, _id: -1 });
+BookingSchema.index({ technicianId: 1, status: 1 });
 
 const Booking: Model<IBooking> =
   mongoose.models.Booking || mongoose.model<IBooking>("Booking", BookingSchema);

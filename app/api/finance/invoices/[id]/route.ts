@@ -10,6 +10,7 @@ import {
   notifyBillChanged,
 } from "@/lib/finance-ledger";
 import { FinanceLedger } from "@/models/finance";
+import { invoiceCanStartCheckout } from "@/lib/invoice-online-payment";
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -17,9 +18,10 @@ export async function GET(
   try {
     const actor = await requireCurrentUser(),
       id = objectIdSchema.parse((await params).id),
-      { invoice, job } = await invoiceContext(id, actor),
+      { invoice, job, booking } = await invoiceContext(id, actor),
       row = await FinanceLedger.findOne({ invoiceId: invoice._id }).lean();
-    return privateJson({ bill: publicBill(invoice, row, job.status) });
+    const canPayOnline = actor.role === "customer" && await invoiceCanStartCheckout(invoice, { bill: row });
+    return privateJson({ bill: { ...publicBill(invoice, row, job.status, booking.pricing), canPayOnline } });
   } catch (error) {
     return apiFailure(error);
   }
@@ -34,7 +36,7 @@ export async function POST(
     const id = objectIdSchema.parse((await params).id),
       input = billActionSchema.parse(await request.json()),
       result = await billAction(id, actor, input);
-    await notifyBillChanged(id, input.requestId);
+    await notifyBillChanged(id, input);
     return privateJson(result);
   } catch (error) {
     return apiFailure(error);

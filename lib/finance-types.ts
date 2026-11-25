@@ -1,3 +1,5 @@
+import type { invoiceBreakdown } from "@/lib/invoice-breakdown";
+
 export interface FinancePolicy {
   _id: string;
   scope: "global" | "category" | "provider";
@@ -144,6 +146,7 @@ export interface FinanceData {
   financeSetupReady: boolean;
 }
 export interface FinalBill {
+  completionBilling?: boolean;
   invoiceId: string;
   invoiceNumber: string;
   jobId: string;
@@ -165,6 +168,8 @@ export interface FinalBill {
   grandTotal: number;
   amountPaid: number;
   balanceDue: number;
+  breakdown: ReturnType<typeof invoiceBreakdown>;
+  canPayOnline?: boolean;
   invoiceStatus: string;
   invoiceVersion: number;
   grossPaise: number;

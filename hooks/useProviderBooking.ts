@@ -62,14 +62,12 @@ export function useAssignTechnician(
 
   return useMutation({
     mutationFn: async (
-      technicianId: string
+      assignment: { technicianId: string; scheduledAt?: string; scheduledEndAt?: string }
     ) => {
       const { data } =
         await api.post(
           `/service-provider/bookings/${bookingId}/assign-technician`,
-          {
-            technicianId,
-          }
+          assignment
         );
 
       return data;

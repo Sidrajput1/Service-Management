@@ -17,7 +17,14 @@ export function useJobs(page = 1, limit = 20) {
 export function useCreateJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: {
+      bookingId: string;
+      technicianId?: string | null;
+      scheduledAt?: string;
+      scheduledEndAt?: string;
+      notes?: string;
+      proofRequired?: boolean;
+    }) => {
       const { data } = await api.post("/jobs", payload);
       return data;
     },
@@ -32,8 +39,16 @@ export function useCreateJob() {
 export function useAssignJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, technicianId }: { id: string; technicianId: string }) => {
-      const { data } = await api.post(`/jobs/${id}/assign`, { technicianId });
+    mutationFn: async ({
+      id,
+      ...assignment
+    }: {
+      id: string;
+      technicianId: string;
+      scheduledAt?: string;
+      scheduledEndAt?: string;
+    }) => {
+      const { data } = await api.post(`/jobs/${id}/assign`, assignment);
       return data;
     },
     onSuccess: () => {

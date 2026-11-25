@@ -2,6 +2,16 @@
 
 Next.js home-services marketplace with customer, Pro, provider and staff workspaces.
 
+## Password management
+
+Service Provider → Profile now contains a Change Password dialog. Public recovery pages are `/forgot-password` and `/reset-password`; the existing sign-in page links to recovery. All password mutations use bcrypt, revoke earlier account sessions through the existing credential version, and require signing in again. The initial Pro change and general profile endpoints remain available through the secure shared implementation.
+
+Configure `RESEND_API_KEY`, an approved `EMAIL_FROM` on a domain verified in Resend, and `EMAIL_REPLY_TO` at server runtime. Reset links reuse the existing server-only `NEXTAUTH_URL` (trusted production HTTPS origin, or localhost for local development). Keep `RESEND_DEBUG` disabled. Docker already injects `.env.production` with `env_file`; no email credential is a build argument or public variable. The Contact Us enquiry form remains unavailable: password email configuration does not enable enquiry submission.
+
+Before enabling password management, review `node scripts/migrate-password-security.mjs --print`, run the script without flags for the read-only preflight against the intended MongoDB replica set/sharded deployment, then explicitly install the reviewed indexes with `node scripts/migrate-password-security.mjs --apply --indexes`. No user backfill is required. Features fail closed until transaction support and indexes are ready. Enable `PASSWORD_TRUST_PROXY=true` only if the trusted reverse proxy overwrites `X-Real-IP`; otherwise requests share a conservative client limit, alongside per-email/account/token limits.
+
+Run `npm run test:passwords`. See [architecture, security trade-offs, verification and staged deployment instructions](PASSWORD_MANAGEMENT_IMPLEMENTATION_REPORT.md). Resend acceptance and full recovery must be tested with a real verified sender in staging before declaring delivery operational. No real email, production credential change, database migration or deployment was performed during implementation.
+
 ## Optional browser notifications
 
 Web Push extends the existing in-app notification pipeline. Users opt in with **Enable notifications** and manage their devices at `/notifications#push-settings`. Browsing, signing in and opening the bell never request browser permission.

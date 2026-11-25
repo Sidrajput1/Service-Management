@@ -1,5 +1,6 @@
 "use client";
 import { useAssignJob, useJobs } from "@/hooks/useJobs";
+import { ServiceWindowFields, enteredServiceWindow, localServiceTime, type ServiceWindowInput } from "@/components/technicians/ServiceWindowFields";
 import { useTechnicians } from "@/hooks/useLead";
 import React, { useMemo, useState } from "react";
 
@@ -348,6 +349,7 @@ function AdminJobsPage() {
   const [selectedAssignment , setSelectedAssignment] = useState("all");
   const [selectedJob,setSelectedJob] = useState<any | null>(null);
   const [selectedTechnician, setSelectedTechnician] = useState<any | null>(null);
+  const [serviceWindows, setServiceWindows] = useState<Record<string, ServiceWindowInput>>({});
 
   // Fetch jobs with pagination and filters (status, payment, assignment)
   const { data: jobsData, isLoading, refetch } = useJobs(page, 20);
@@ -431,18 +433,28 @@ function AdminJobsPage() {
   }, [jobs]);
 
   async function handleAssign(jobId: string) {
-    const technicianId = selectedTechnicians[jobId];
+    const technicianId = selectedTechnicians[jobId] || selectedJobTechnicianId;
     if (!technicianId) {
       toast.error("Please select a technician first");
       return;
     }
     // await assignJob.mutateAsync({ id: jobId, technicianId });
     try {
-      await assignJob.mutateAsync({ id: jobId, technicianId });
+      const savedStart = selectedJob?.scheduledAt || selectedJob?.bookingId?.scheduledAt || selectedJob?.bookingId?.timeWindow?.from;
+      const savedEnd = selectedJob?.scheduledEndAt || selectedJob?.bookingId?.timeWindow?.to;
+      await assignJob.mutateAsync({
+        id: jobId,
+        technicianId,
+        ...enteredServiceWindow(serviceWindows[jobId], {
+          scheduledAt: savedStart,
+          scheduledEndAt: savedEnd,
+        }),
+      });
       toast.success("Job assigned successfully");
+      setSelectedJob(null);
       refetch?.();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to assign job");
+      toast.error(error?.response?.data?.error || error?.message || "Failed to assign job");
     }
   };
 
@@ -1123,13 +1135,21 @@ function AdminJobsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {technicians.map((tech: any) => (
-                          <SelectItem key={tech._id} value={tech._id}>
+                          <SelectItem key={tech._id} value={tech._id} disabled={tech.status === "on_leave" || tech.isActive === false}>
                             {getTechnicianName(tech)} — {tech.status}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <ServiceWindowFields
+                    value={serviceWindows[selectedJob._id] ?? {
+                      start: localServiceTime(selectedJob.scheduledAt || selectedJob.bookingId?.scheduledAt || selectedJob.bookingId?.timeWindow?.from),
+                      end: localServiceTime(selectedJob.scheduledEndAt || selectedJob.bookingId?.timeWindow?.to),
+                    }}
+                    onChange={(value) => setServiceWindows((previous) => ({ ...previous, [selectedJob._id]: value }))}
+                  />
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <Button

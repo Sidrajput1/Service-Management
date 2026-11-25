@@ -1,11 +1,35 @@
 "use client";
-import { useState } from "react";
+
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
-type CheckoutResult = { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
-type CheckoutOptions = { key: string; amount: number; currency: string; name: string; description: string; order_id: string; prefill: { name: string; contact: string; email: string }; handler: (result: CheckoutResult) => Promise<void>; modal: { ondismiss: () => void } };
-declare global { interface Window { Razorpay?: new (options: CheckoutOptions) => { open(): void; on(event: string, callback: () => void): void } } }
+
+type CheckoutResult = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+type CheckoutOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  prefill: { name: string; contact: string; email: string };
+  handler: (result: CheckoutResult) => Promise<void>;
+  modal: { ondismiss: () => void };
+};
+declare global {
+  interface Window {
+    Razorpay?: new (options: CheckoutOptions) => {
+      open(): void;
+      on(event: string, callback: () => void): void;
+    };
+  }
+}
+
 let checkoutScript: Promise<void> | undefined;
 function loadCheckout() {
   if (window.Razorpay) return Promise.resolve();
@@ -13,40 +37,152 @@ function loadCheckout() {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    const fail = () => { clearTimeout(timeout); checkoutScript = undefined; script.remove(); reject(new Error("Could not load payment checkout. Please try again.")); };
+    const fail = () => {
+      clearTimeout(timeout);
+      checkoutScript = undefined;
+      script.remove();
+      reject(new Error("Could not load payment checkout."));
+    };
     const timeout = setTimeout(fail, 15000);
-    script.onload = () => { if (window.Razorpay) { clearTimeout(timeout); resolve(); } else fail(); };
+    script.onload = () => {
+      if (!window.Razorpay) return fail();
+      clearTimeout(timeout);
+      resolve();
+    };
     script.onerror = fail;
     document.body.appendChild(script);
   });
   return checkoutScript;
 }
-export default function CustomerPayBtn({ invoiceId, customerName, customerPhone, customerEmail, disabled = false }: { invoiceId: string; customerName?: string; customerPhone?: string; customerEmail?: string; disabled?: boolean }) {
+
+export default function CustomerPayBtn({
+  invoiceId,
+  customerName,
+  customerPhone,
+  customerEmail,
+  disabled = false,
+}: {
+  invoiceId: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  disabled?: boolean;
+}) {
+  const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; error?: boolean }>();
   const client = useQueryClient();
-  const refresh = () => { client.invalidateQueries({ queryKey: ["customer-invoices"] }); client.invalidateQueries({ queryKey: ["customer-invoicebyid"] }); client.invalidateQueries({ queryKey: ["customer-booking"] }); };
+
+  async function refreshAndRelease() {
+    try {
+      await client.invalidateQueries({
+        predicate: ({ queryKey }) =>
+          [
+            "customer-invoices",
+            "customer-invoicebyid",
+            "customer-booking",
+          ].includes(String(queryKey[0])) ||
+          (queryKey[0] === "finance" &&
+            queryKey[3] === `/finance/invoices/${invoiceId}`),
+      });
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
   async function pay() {
-    if (busy || disabled) return;
-    setBusy(true); setError(false); setMessage("");
+    if (inFlight.current || disabled) return;
+    inFlight.current = true;
+    setBusy(true);
+    setNotice(undefined);
     try {
       await loadCheckout();
-      // The server rechecks ownership, payable state, and the amount at click time.
-      const { data } = await api.post<{ keyId: string; order: { id: string; amount: number; currency: string } }>(`/invoices/${invoiceId}/razorpay/order`);
+      // The server owns the bill's amount and eligibility.
+      const { data } = await api.post<{
+        keyId: string;
+        order: { id: string; amount: number; currency: string };
+      }>(`/invoices/${invoiceId}/razorpay/order`);
       if (!window.Razorpay) throw new Error("Checkout is unavailable");
-      const checkout = new window.Razorpay({ key: data.keyId, order_id: data.order.id, amount: data.order.amount, currency: data.order.currency, name: "Servizato", description: "Service invoice payment", prefill: { name: customerName || "", contact: customerPhone || "", email: customerEmail || "" },
-        modal: { ondismiss: () => { setBusy(false); setMessage("Checkout closed. Refreshing the current payment state."); refresh(); } },
-        handler: async response => {
-          setMessage("Checking payment confirmation…");
-          try { await api.post("/razorpay/verify", response); setMessage("Payment checked by the server. Your invoice is refreshing."); }
-          catch { setError(true); setMessage("Confirmation is pending. Refresh the invoice before trying again; a payment may still be processing."); }
-          finally { setBusy(false); refresh(); }
+      let verifying = false;
+      const checkout = new window.Razorpay({
+        key: data.keyId,
+        order_id: data.order.id,
+        amount: data.order.amount,
+        currency: data.order.currency,
+        name: "Servizato",
+        description: "Service invoice payment",
+        prefill: {
+          name: customerName || "",
+          contact: customerPhone || "",
+          email: customerEmail || "",
+        },
+        modal: {
+          ondismiss: () => {
+            if (verifying) return;
+            setNotice({
+              text: "Checkout closed. Check the current balance before trying again.",
+            });
+            void refreshAndRelease();
+          },
+        },
+        handler: async (response) => {
+          if (verifying) return;
+          verifying = true;
+          setNotice({ text: "Checking payment confirmation…" });
+          try {
+            const { data } = await api.post<{ ok?: boolean }>(
+              "/razorpay/verify",
+              response,
+            );
+            if (!data.ok) throw new Error("Payment not confirmed");
+            setNotice({ text: "Payment verified. Refreshing your bill." });
+          } catch {
+            setNotice({
+              error: true,
+              text: "Payment confirmation is pending. Refresh your bill before trying again.",
+            });
+          } finally {
+            await refreshAndRelease();
+          }
         },
       });
-      checkout.on("payment.failed", () => { setBusy(false); setError(true); setMessage("Payment wasn’t completed. Your invoice is refreshing; try again when its current state is confirmed."); refresh(); });
+      checkout.on("payment.failed", () => {
+        if (!verifying)
+          setNotice({
+            error: true,
+            text: "Payment wasn’t completed. Retry in checkout or close it to refresh your bill.",
+          });
+      });
       checkout.open();
-    } catch { setBusy(false); setError(true); setMessage("Payment checkout is unavailable or this invoice is no longer payable. Refresh the invoice and try again."); refresh(); }
+    } catch {
+      setNotice({
+        error: true,
+        text: "Payment checkout is unavailable. Refresh the bill and try again if a balance is due.",
+      });
+      await refreshAndRelease();
+    }
   }
-  return <div><Button className="public-button public-button-primary w-full" disabled={busy || disabled} onClick={pay}>{busy ? "Checking payment…" : "Pay securely with Razorpay"}</Button>{message && <p role={error ? "alert" : "status"} className={`mt-3 text-xs leading-6 ${error ? "text-primary" : "text-muted-foreground"}`}>{message}</p>}</div>;
+
+  return (
+    <div>
+      <Button
+        type="button"
+        className="public-button public-button-primary min-h-11 w-full whitespace-normal text-center"
+        disabled={busy || disabled}
+        aria-busy={busy}
+        onClick={() => void pay()}
+      >
+        {busy ? "Checking payment…" : "Pay securely with Razorpay"}
+      </Button>
+      {notice && (
+        <p
+          role={notice.error ? "alert" : "status"}
+          className={`mt-3 text-xs leading-6 ${notice.error ? "text-primary" : "text-muted-foreground"}`}
+        >
+          {notice.text}
+        </p>
+      )}
+    </div>
+  );
 }

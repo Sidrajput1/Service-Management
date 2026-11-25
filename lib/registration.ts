@@ -1,13 +1,7 @@
 import { z } from "zod";
 import { text } from "@/lib/marketplace-validation";
-export const registrationPassword = z
-  .string()
-  .min(6, "Password must be at least 6 characters")
-  .max(72)
-  .refine(
-    (value) => Buffer.byteLength(value, "utf8") <= 72,
-    "Password must fit within 72 UTF-8 bytes",
-  );
+export { accountPassword as registrationPassword } from "@/lib/password-policy";
+import { accountPassword as registrationPassword } from "@/lib/password-policy";
 export const registrationPhone = z
   .string()
   .transform((value) => value.replace(/[\s()-]/g, ""))

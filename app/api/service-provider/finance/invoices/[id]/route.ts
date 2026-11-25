@@ -8,6 +8,7 @@ import { requireServiceProvider } from "@/lib/service-provider";
 import Invoice from "@/models/invoice";
 import Job from "@/models/job";
 import {ServiceOffering,Customer,Booking} from "@/models/index";
+import { invoiceBreakdown } from "@/lib/invoice-breakdown";
 
 export const runtime = "nodejs";
 
@@ -89,7 +90,7 @@ export async function GET(
           "customerId",
           "name phone email",
         )
-        .populate(
+        .populate<{ bookingId: { pricing?: import("@/models/booking").IBooking["pricing"] } | null }>(
           "bookingId",
           "serviceType scheduledAt address pricing notes",
         )
@@ -114,6 +115,7 @@ export async function GET(
     return NextResponse.json({
       success: true,
       invoice,
+      breakdown: invoiceBreakdown(invoice, invoice.bookingId?.pricing),
     });
   } catch (error: any) {
     console.error(

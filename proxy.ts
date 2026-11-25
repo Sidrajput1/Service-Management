@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { getRoleHome } from "@/lib/role-route";
 import { safeCustomerDestination, authHref } from "@/lib/booking-redirect";
+import { currentCredentialAccount } from "@/lib/credential-session";
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   let token;
+  let current;
   try {
     token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    if (token) current = await currentCredentialAccount(token);
   } catch {
     token = null;
   }
-  if (!token) {
+  if (!token || !current) {
     const destination =
       safeCustomerDestination(pathname + search) ||
       safeCustomerDestination(pathname);
@@ -18,8 +21,8 @@ export async function proxy(req: NextRequest) {
       new URL(authHref("/signin", destination), req.url),
     );
   }
-  const role = typeof token.role === "string" ? token.role : "";
-  if (token.mustChangePassword)
+  const role = current.role;
+  if (current.mustChangePassword)
     return NextResponse.redirect(new URL("/change-password", req.url));
   const required = pathname.startsWith("/customer")
     ? ["customer"]

@@ -143,6 +143,9 @@ export function renderWorkflowFixture({
       return React.createElement("img", attributes);
     },
     "@/components/finance/FinalBillPanel": { FinalBillPanel: () => null },
+    "@/components/finance/RunningBillPanel": { RunningBillPanel: () => null },
+    "@/components/finance/FinanceUi": { paymentLabels: { cash: "Cash paid to the service team", direct_upi: "UPI paid directly to the service team", servizato_online: "Online through Servizato" } },
+    "@tanstack/react-query": { useQuery: () => ({ data: { items: [] } }) },
     "@/components/finance/BookingActions": { CancellationPanel: () => null },
     "@/hooks/useJobStatusConnection": { useJobStatusConnection() {} },
     "@/lib/cloudinary": { uploadToCloudinary: cloudinary },

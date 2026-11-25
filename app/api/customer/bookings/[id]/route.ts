@@ -4,6 +4,9 @@ import { apiFailure, privateHeaders } from "@/lib/api-response";
 import { objectIdSchema } from "@/lib/pagination";
 
 import { requireCustomerProfile } from "@/lib/customer";
+import { jobOtpSelect, jobOtpState } from "@/lib/job-start-otp";
+import { quoteSummary } from "@/lib/job-quotes";
+import { jobRunningBill } from "@/lib/job-running-bill";
 
 import { connectToDb } from "@/lib/db";
 
@@ -308,8 +311,11 @@ export async function GET(
       bookingId: booking._id,
       serviceProviderId:
         booking.serviceProviderId?._id || booking.serviceProviderId,
+      ...(booking.technicianId
+        ? { technicianId: booking.technicianId._id || booking.technicianId }
+        : {}),
     })
-      .select("+otp +otpExpiresAt")
+      .select(jobOtpSelect)
       .populate({
         path: "technicianId",
         select: "status isActive skills userId",
@@ -344,6 +350,26 @@ export async function GET(
     const tracking = getCustomerTracking(job, booking);
 
     const timeline = buildTimeline(booking, job, invoice);
+    const quote = job ? (await quoteSummary(job)).latest : null;
+    let visibleJob = null;
+    let verification: "locked" | "unavailable" | null = null;
+    if (job) {
+      const state = jobOtpState(job);
+      const { otp, otpExpiresAt, ...details } = job;
+      delete details.otpAttempts;
+      delete details.otpVersion;
+      delete details.otpLockedAt;
+      visibleJob = details;
+      if (
+        booking.status === "assigned" &&
+        booking.technicianId &&
+        job.technicianId &&
+        ["assigned", "enroute", "arrived"].includes(job.status)
+      ) {
+        if (state === "ready") visibleJob = { ...details, otp, otpExpiresAt };
+        else verification = state === "locked" ? "locked" : "unavailable";
+      }
+    }
 
     booking.address = serviceAddressForViewer(
       booking.address,
@@ -372,7 +398,10 @@ export async function GET(
 
         technician: job?.technicianId || booking.technicianId || null,
 
-        job,
+        job: visibleJob,
+        runningBill: job && !invoice ? await jobRunningBill(job, booking) : null,
+        quote,
+        verification,
         invoice,
         tracking,
         timeline,

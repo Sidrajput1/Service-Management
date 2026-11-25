@@ -6,7 +6,9 @@ import { useCustomerInvoice, useCustomerInvoiceById } from "@/hooks/useCustomer"
 import { CustomerPageHeading, CustomerState, CursorPager, StatusBadge } from "./CustomerUi";
 import { dateTime, money, type InvoiceSummary, type InvoiceDetail, type CustomerIdentity } from "@/lib/customer-types";
 import CustomerPayBtn from "@/components/payments/CustomerPayBtn";
-import { canPayInvoice } from "@/lib/access-policy.mjs";
+import { InvoiceBreakdown } from "@/components/invoice/InvoiceBreakdown";
+import type { invoiceBreakdown } from "@/lib/invoice-breakdown";
+import { paymentLabels } from "@/lib/payment-methods";
 
 export function CustomerInvoicesView() {
   const [history, setHistory] = useState<string[]>([]);
@@ -16,8 +18,119 @@ export function CustomerInvoicesView() {
 }
 export function CustomerInvoiceView({ id }: { id: string }) {
   const query = useCustomerInvoiceById(id);
-  const data = query.data as { invoice: InvoiceDetail; customer?: CustomerIdentity; canPay: boolean } | undefined;
+  const data = query.data as
+    | {
+        invoice: InvoiceDetail;
+        customer?: CustomerIdentity;
+        canPay: boolean;
+        breakdown: ReturnType<typeof invoiceBreakdown>;
+      }
+    | undefined;
   const invoice = data?.invoice;
-  const bookingId = invoice?.bookingId && (typeof invoice.bookingId === "string" ? invoice.bookingId : invoice.bookingId._id);
-  return <><CustomerPageHeading eyebrow="YOUR SERVICE INVOICE" title={invoice?.invoiceNumber || "Invoice details"} back="/customer/invoice" /><CustomerState loading={query.isLoading} error={query.isError && !data} retry={() => query.refetch()}>{invoice && <div className="grid items-start gap-6 lg:grid-cols-[1.5fr_1fr]"><section className="customer-panel"><div className="mb-7 flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-display text-lg font-semibold">Invoice breakdown</h2><p className="mt-2 text-xs text-muted-foreground">Issued {dateTime(invoice.issuedAt || invoice.createdAt)}</p></div><StatusBadge status={invoice.status} /></div><div className="overflow-x-auto"><table className="w-full min-w-100 text-left text-sm"><caption className="sr-only">Invoice line items</caption><thead className="border-b border-border text-xs text-muted-foreground"><tr><th className="pb-3 font-semibold">Description</th><th className="px-3 pb-3 font-semibold">Qty</th><th className="px-3 pb-3 font-semibold">Unit price</th><th className="pb-3 text-right font-semibold">Amount</th></tr></thead><tbody>{invoice.items.map((item, index) => <tr className="border-b border-border/70" key={index}><td className="py-4 leading-6">{item.description}</td><td className="px-3">{item.qty}</td><td className="whitespace-nowrap px-3">{money(item.unitPrice, invoice.currency)}</td><td className="whitespace-nowrap text-right">{money(item.amount, invoice.currency)}</td></tr>)}</tbody></table></div><dl className="ml-auto mt-6 max-w-85 space-y-3 text-sm">{[["Subtotal", invoice.subtotal], ["Discount", -invoice.discountAmount], [`Tax (${invoice.taxPercent}%)`, invoice.taxAmount], ["Total", invoice.grandTotal], ["Amount paid", invoice.amountPaid], ["Balance due", invoice.balanceDue]].map(([label, value]) => <div className="flex justify-between gap-5 last:border-t last:border-border last:pt-4 last:font-bold" key={label}><dt className="text-muted-foreground">{label}</dt><dd>{money(Number(value), invoice.currency)}</dd></div>)}</dl>{invoice.notes && <p className="mt-6 border-t border-border pt-5 text-sm leading-7 text-muted-foreground">{invoice.notes}</p>}</section><aside className="space-y-5"><section className="customer-panel"><h2 className="text-sm font-bold">Payment information</h2><p className="mb-5 mt-3 text-sm leading-7 text-muted-foreground">{invoice.status === "paid" ? "This invoice is paid. Your payment record is kept with this invoice." : invoice.status === "draft" ? "This invoice is a draft. Payment becomes available after it is issued." : invoice.status === "cancelled" ? "This invoice is cancelled and cannot be paid." : "The payable amount is set by the current invoice and confirmed by the server at checkout."}</p>{data?.canPay && canPayInvoice(invoice) && !query.isError && <CustomerPayBtn disabled={query.isFetching} invoiceId={id} customerName={data.customer?.name} customerEmail={data.customer?.email} customerPhone={data.customer?.phone} />}{query.isError && <p role="alert" className="mb-4 text-sm text-primary">Current payment state could not be confirmed. Refresh before paying.</p>}<button className="public-text-link mt-4" onClick={() => query.refetch()}>Refresh invoice</button>{invoice.paymentReceivedAt && <p className="mt-4 text-xs text-muted-foreground">Payment recorded {dateTime(invoice.paymentReceivedAt)}</p>}</section><section className="customer-panel space-y-3"><a href={`/api/invoices/${id}/pdf`} className="public-button public-button-outline w-full">Download invoice PDF</a>{bookingId && <Link href={`/customer/bookings/${bookingId}`} className="public-button public-button-outline w-full">View related booking</Link>}</section></aside></div>}</CustomerState></>;
+  const bookingId =
+    invoice?.bookingId &&
+    (typeof invoice.bookingId === "string"
+      ? invoice.bookingId
+      : invoice.bookingId._id);
+  return (
+    <>
+      <CustomerPageHeading
+        eyebrow="YOUR SERVICE INVOICE"
+        title={invoice?.invoiceNumber || "Invoice details"}
+        back="/customer/invoice"
+      />
+      <CustomerState
+        loading={query.isLoading}
+        error={query.isError && !data}
+        retry={() => query.refetch()}
+      >
+        {invoice && data && (
+          <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+            <section className="customer-panel min-w-0">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-lg font-semibold">
+                    Invoice breakdown
+                  </h2>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Issued {dateTime(invoice.issuedAt || invoice.createdAt)}
+                  </p>
+                </div>
+                <StatusBadge status={invoice.status} />
+              </div>
+              <InvoiceBreakdown
+                breakdown={data.breakdown}
+                currency={invoice.currency}
+                payment={invoice}
+              />
+              {invoice.notes && (
+                <p className="mt-6 break-words border-t border-border pt-5 text-sm leading-7 text-muted-foreground">
+                  {invoice.notes}
+                </p>
+              )}
+            </section>
+            <aside className="min-w-0 space-y-5">
+              <section className="customer-panel">
+                <h2 className="text-sm font-bold">Payment information</h2>
+                {invoice.paymentMethod && <p className="mt-3 text-sm">{paymentLabels[invoice.paymentMethod] || invoice.paymentMethod}</p>}
+                <p className="mb-5 mt-3 text-sm leading-7 text-muted-foreground">
+                  {invoice.status === "paid"
+                    ? "This invoice is paid. Your payment record is kept with this invoice."
+                    : invoice.status === "draft"
+                      ? "This invoice is a draft."
+                      : invoice.status === "cancelled"
+                        ? "This invoice is cancelled."
+                        : data.canPay
+                          ? "The payable amount is confirmed by the server at checkout."
+                          : "Open the related booking to review how this bill is being paid."}
+                </p>
+                {data.canPay && !query.isError && (
+                  <CustomerPayBtn
+                    disabled={query.isFetching}
+                    invoiceId={id}
+                    customerName={data.customer?.name}
+                    customerEmail={data.customer?.email}
+                    customerPhone={data.customer?.phone}
+                  />
+                )}
+                {query.isError && (
+                  <p role="alert" className="mb-4 text-sm text-primary">
+                    Current payment state could not be confirmed. Refresh before
+                    paying.
+                  </p>
+                )}
+                <button
+                  className="public-text-link mt-4"
+                  onClick={() => query.refetch()}
+                >
+                  Refresh invoice
+                </button>
+                {invoice.paymentReceivedAt && (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    Payment recorded {dateTime(invoice.paymentReceivedAt)}
+                  </p>
+                )}
+              </section>
+              <section className="customer-panel space-y-3">
+                <a
+                  href={`/api/invoices/${id}/pdf`}
+                  className="public-button public-button-outline w-full"
+                >
+                  Download invoice PDF
+                </a>
+                {bookingId && (
+                  <Link
+                    href={`/customer/bookings/${bookingId}`}
+                    className="public-button public-button-outline w-full"
+                  >
+                    View related booking
+                  </Link>
+                )}
+              </section>
+            </aside>
+          </div>
+        )}
+      </CustomerState>
+    </>
+  );
 }

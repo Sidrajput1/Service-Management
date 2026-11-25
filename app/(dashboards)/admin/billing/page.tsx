@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useMemo, useState, BaseSyntheticEvent } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-
+import React, { useState, type FormEvent } from "react";
+import { jobActionError } from "@/components/finance/JobQuotePanel";
+import { InvoiceBreakdown } from "@/components/invoice/InvoiceBreakdown";
+import { invoiceBreakdown } from "@/lib/invoice-breakdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,14 +19,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
-  useAddInvoiceItems,
   useCreateInvoiceFromJob,
   useCreatePayment,
   useFinalizeInvoice,
   useInvoices,
 } from "@/hooks/useBillings";
 import { useJobs } from "@/hooks/useJobs";
-import { usePriceItem } from "@/hooks/usePriceItem";
 import {
   Select,
   SelectContent,
@@ -35,7 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import PricePicker from "@/components/price-master/PricePicker";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -60,66 +56,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-// const InvoiceSchema = z.object({
-//   invoiceNumber: z.string().optional(),
-
-//   jobId: z.string().min(1, "Job is required"),
-
-//   discountAmount: z.coerce.number().default(0),
-//   taxPercent: z.coerce.number().default(18),
-
-//   notes: z.string().optional(),
-
-//   dueDays: z.coerce.number().default(0),
-
-//   items: z
-//     .array(
-//       z.object({
-//         itemType: z.enum(["service", "part", "visit", "discount", "other"]),
-//         description: z.string().min(1),
-//         //qty: z.coerce.number().positive("Quantity must be a positive number"),
-//         //qty: z.coerce.number().transform((val) => Number(val)),
-//         //unitPrice: z.coerce.number().min(0, "Unit price cannot be negative"),
-//         //unitPrice: z.coerce.number().transform((val) => Number(val)),
-//           qty: z.coerce.number().pipe(z.number().positive()),
-//         unitPrice: z.coerce.number().pipe(z.number().min(0)),
-
-//       }),
-//     )
-//     .min(1, "At least one item required"),
-// });
-
-const num = z.union([z.string(), z.number()]).transform((val) => Number(val));
-
-const InvoiceSchema = z.object({
-  invoiceNumber: z.string().optional(),
-
-  jobId: z.string().min(1, "Job is required"),
-
-  discountAmount: num.default(0),
-  taxPercent: num.default(18),
-  dueDays: num.default(0),
-
-  notes: z.string().optional(),
-
-  items: z
-    .array(
-      z.object({
-        itemType: z.enum(["service", "part", "visit", "discount", "other"]),
-        description: z.string().min(1),
-
-        qty: num.refine((v) => v > 0, "Quantity must be positive"),
-        unitPrice: num.refine((v) => v >= 0, "Price cannot be negative"),
-      }),
-    )
-    .min(1, "At least one item required"),
-});
-type InvoiceForm = z.infer<typeof InvoiceSchema>;
-type SubmitHandler<T> = (
-  data: T,
-  event?: BaseSyntheticEvent,
-) => void | Promise<void>;
 
 function badgeForStatus(status?: string) {
   const s = (status || "draft").toLowerCase();
@@ -203,110 +139,54 @@ export default function AdminBillingPage() {
 
   const { data: invoicesData, isLoading, refetch } = useInvoices(page, 20);
 
-  console.log("Invoices:", invoicesData);
   const { data: jobsData } = useJobs(1, 100);
 
   const createInvoice = useCreateInvoiceFromJob();
-  const addItems = useAddInvoiceItems();
+  const [invoiceJobId, setInvoiceJobId] = useState("");
   const finalizeInvoice = useFinalizeInvoice();
   const createPayment = useCreatePayment();
 
-  const { data: priceData } = usePriceItem();
-
   const router = useRouter();
   const billingPath = usePathname();
-  const {
-    register,
-    control,
-    handleSubmit,
-    reset,
-    watch,
-    setValue,
-    formState: { isSubmitting, errors },
-  } = useForm({
-    resolver: zodResolver(InvoiceSchema),
-    defaultValues: {
-      discountAmount: 0,
-      taxPercent: 18,
-      dueDays: 0,
-      items: [
-        {
-          itemType: "service",
-          description: "",
-          qty: 1,
-          unitPrice: 0,
-        },
-      ],
-    },
-  });
-
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "items",
-  });
-
   const invoices = invoicesData?.invoices || [];
 
   const selectedInvoice = invoices.find(
     (inv: any) => inv._id === selectedInvoiceId,
   );
 
-  const filteredInvoices = useMemo(() => {
-    const q = search.trim().toLowerCase();
+  const q = search.trim().toLowerCase();
+  const filteredInvoices = invoices.filter((inv: any) => {
+    const customer = inv.customerId?.name || "";
+    const number = inv.invoiceNumber || "";
+    const status = (inv.status || "").toLowerCase();
+    const matchesQuery = !q || `${customer} ${number}`.toLowerCase().includes(q);
+    const matchesStatus = selectedStatus === "all" || status.includes(selectedStatus);
+    return matchesQuery && matchesStatus;
+  });
 
-    return invoices.filter((inv: any) => {
-      const customer = inv.customerId?.name || "";
-      const number = inv.invoiceNumber || "";
-      const status = (inv.status || "").toLowerCase();
-
-      const matchesQuery =
-        !q || `${customer} ${number}`.toLowerCase().includes(q);
-      const matchesStatus =
-        selectedStatus === "all" ? true : status.includes(selectedStatus);
-
-      return matchesQuery && matchesStatus;
-    });
-  }, [invoices, search, selectedStatus]);
-
-  const stats = useMemo(() => {
-    const total = invoices.length;
-    const paid = invoices.filter((inv: any) =>
+  const stats = {
+    total: invoices.length,
+    paid: invoices.filter((inv: any) =>
       (inv.status || "").toLowerCase().includes("paid"),
-    ).length;
-    const pending = invoices.filter(
-      (inv: any) =>
-        (inv.status || "").toLowerCase().includes("draft") ||
-        (inv.status || "").toLowerCase().includes("pending"),
-    ).length;
-    const totalRevenue = invoices.reduce(
-      (sum: number, inv: any) => sum + Number(inv.grandTotal || 0),
-      0,
-    );
+    ).length,
+    pending: invoices.filter((inv: any) =>
+      /draft|pending/.test((inv.status || "").toLowerCase()),
+    ).length,
+    totalRevenue: invoices.reduce((sum: number, inv: any) =>
+      sum + Number(inv.grandTotal || 0), 0),
+  };
 
-    return { total, paid, pending, totalRevenue };
-  }, [invoices]);
-
-  async function onCreate(values: InvoiceForm) {
+  async function onCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!invoiceJobId) return;
     try {
-      const created = await createInvoice.mutateAsync({
-        jobId: values.jobId,
-        discountAmount: values.discountAmount,
-        taxPercent: values.taxPercent,
-        notes: values.notes,
-        dueDays: values.dueDays,
-        items: values.items.map((item) => ({
-          ...item,
-          amount: item.qty * item.unitPrice,
-        })),
-      });
-      toast.success("Invoice created successfully");
-      reset();
+      const { invoice } = await createInvoice.mutateAsync({ jobId: invoiceJobId });
+      toast.success("Invoice is ready");
+      setInvoiceJobId("");
       setPage(1);
-      refetch?.();
-      // if your API returns invoice ID, you can auto-open it
-      if (created?._id) setSelectedInvoiceId(created._id);
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to create invoice");
+      setSelectedInvoiceId(invoice._id);
+    } catch (error) {
+      toast.error(jobActionError(error, "Failed to create invoice"));
     }
   }
 
@@ -380,259 +260,38 @@ export default function AdminBillingPage() {
               Create Invoice from Job
             </CardTitle>
             <p className="mt-1 text-sm text-slate-500">
-              Build an invoice from a completed job and add custom items
+              Generate or recover the invoice for a completed job using its authorized pricing.
             </p>
           </div>
         </CardHeader>
 
         <CardContent className="pt-6">
-          <form onSubmit={handleSubmit(onCreate)} className="space-y-6">
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="space-y-2 lg:col-span-2">
-                <Label className="text-sm font-medium text-slate-700">
-                  Job
-                </Label>
-                <select
-                  {...register("jobId")}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                >
-                  <option value="">Select completed job</option>
-                  {(jobsData?.jobs || []).map((job: any) => (
-                    <option key={job._id} value={job._id}>
-                      {job.bookingId?.serviceType || "Service"} —{" "}
-                      {job.bookingId?.customerId?.name || "Customer"} —{" "}
-                      {job.status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Invoice builder</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  Add services, parts, visit charges, or discounts
-                </p>
-                <p className="mt-2 text-xs text-slate-500">
-                  Use predefined price master items where possible.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
-                  Discount Amount
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  {...register("discountAmount", { valueAsNumber: true })}
-                  className="h-11 rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
-                  Tax %
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  {...register("taxPercent", { valueAsNumber: true })}
-                  className="h-11 rounded-xl"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">
-                  Due Days
-                </Label>
-                <Input
-                  type="number"
-                  {...register("dueDays", { valueAsNumber: true })}
-                  className="h-11 rounded-xl"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-slate-700">
-                Notes
-              </Label>
-              <Input
-                {...register("notes")}
-                placeholder="Invoice note"
-                className="h-11 rounded-xl"
-              />
-            </div>
-
-            <Separator />
-
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900">
-                    Invoice Items
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Add each service or part as a separate line item
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    append({
-                      itemType: "service",
-                      description: "",
-                      qty: 1,
-                      unitPrice: 0,
-                    })
-                  }
-                  className="rounded-xl"
-                >
-                  Add Item
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {fields.map((field, index) => {
-                  const itemType = watch(`items.${index}.itemType`);
-                  const filteredItems =
-                    priceData?.items?.filter(
-                      (item: any) =>
-                        item.itemType === itemType && item.isActive,
-                    ) || [];
-
-                  return (
-                    <div
-                      key={field.id}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                      <div className="grid gap-4 md:grid-cols-5">
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-slate-700">
-                            Type
-                          </Label>
-                          <select
-                            {...register(`items.${index}.itemType` as const)}
-                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                          >
-                            <option value="service">Service</option>
-                            <option value="part">Part</option>
-                            <option value="visit">Visit</option>
-                            <option value="discount">Discount</option>
-                            <option value="other">Other</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-2 md:col-span-2">
-                          <Label className="text-sm font-medium text-slate-700">
-                            Description
-                          </Label>
-                          <select
-                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                            onChange={(e) => {
-                              const selected = filteredItems.find(
-                                (item: any) => item._id === e.target.value,
-                              );
-
-                              if (selected) {
-                                setValue(
-                                  `items.${index}.description`,
-                                  selected.name,
-                                );
-                                setValue(
-                                  `items.${index}.unitPrice`,
-                                  Number(selected.price),
-                                );
-                              }
-                            }}
-                          >
-                            <option value="">Select {itemType}</option>
-                            {filteredItems.map((item: any) => (
-                              <option key={item._id} value={item._id}>
-                                {item.name} - {formatMoney(item.price)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-slate-700">
-                            Qty
-                          </Label>
-                          <Input
-                            type="number"
-                            {...register(`items.${index}.qty` as const, {
-                              valueAsNumber: true,
-                            })}
-                            className="h-11 rounded-xl"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium text-slate-700">
-                            Unit Price
-                          </Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            {...register(`items.${index}.unitPrice` as const, {
-                              valueAsNumber: true,
-                            })}
-                            className="h-11 rounded-xl"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex justify-end">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => remove(index)}
-                          disabled={fields.length === 1}
-                          className="rounded-xl text-slate-600"
-                        >
-                          Remove item
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {errors.items && (
-                <p className="text-sm text-rose-600">
-                  {String(errors.items.message || "Item validation error")}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => reset()}
-                className="h-11 rounded-xl"
+          <form onSubmit={onCreate} className="flex flex-wrap items-end gap-4">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label htmlFor="invoice-job" className="text-sm font-medium">Completed job</Label>
+              <select
+                id="invoice-job"
+                required
+                value={invoiceJobId}
+                onChange={(event) => setInvoiceJobId(event.target.value)}
+                className="h-11 w-full rounded-xl border bg-background px-3 text-sm"
               >
-                Reset
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting || createInvoice.isPending}
-                className="h-11 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white shadow-sm hover:from-blue-700 hover:to-indigo-700"
-              >
-                {isSubmitting || createInvoice.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create Invoice"
-                )}
-              </Button>
+                <option value="">Select completed job</option>
+                {(jobsData?.jobs || []).filter((job: {
+                  status: string;
+                }) => job.status === "completed").map((job: {
+                  _id: string;
+                  bookingId?: { serviceType?: string; customerId?: { name?: string } };
+                }) => (
+                  <option key={job._id} value={job._id}>
+                    {job.bookingId?.serviceType || "Service"} · {job.bookingId?.customerId?.name || "Customer"} · {job._id.slice(-6)}
+                  </option>
+                ))}
+              </select>
             </div>
+            <Button type="submit" disabled={!invoiceJobId || createInvoice.isPending}>
+              {createInvoice.isPending ? "Preparing invoice…" : "Open or generate invoice"}
+            </Button>
           </form>
         </CardContent>
       </Card>
@@ -851,61 +510,7 @@ export default function AdminBillingPage() {
                 />
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-semibold text-slate-600">
-                        Type
-                      </TableHead>
-                      <TableHead className="font-semibold text-slate-600">
-                        Description
-                      </TableHead>
-                      <TableHead className="font-semibold text-slate-600">
-                        Qty
-                      </TableHead>
-                      <TableHead className="font-semibold text-slate-600">
-                        Unit
-                      </TableHead>
-                      <TableHead className="font-semibold text-slate-600">
-                        Amount
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(selectedInvoice.items || []).length === 0 ? (
-                      <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="py-10 text-center text-slate-500"
-                        >
-                          No line items found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      selectedInvoice.items.map((item: any, idx: number) => (
-                        <TableRow key={idx} className="hover:bg-slate-50/70">
-                          <TableCell className="capitalize text-slate-700">
-                            {item.itemType}
-                          </TableCell>
-                          <TableCell className="text-slate-900">
-                            {item.description}
-                          </TableCell>
-                          <TableCell className="text-slate-600">
-                            {item.qty}
-                          </TableCell>
-                          <TableCell className="text-slate-600">
-                            {formatMoney(item.unitPrice)}
-                          </TableCell>
-                          <TableCell className="text-slate-900">
-                            {formatMoney(item.amount)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+              <InvoiceBreakdown breakdown={invoiceBreakdown(selectedInvoice, selectedInvoice.bookingId?.pricing)} currency={selectedInvoice.currency} />
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button

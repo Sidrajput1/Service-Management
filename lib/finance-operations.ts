@@ -37,7 +37,8 @@ import {
   paise,
 } from "./finance-policy.mjs";
 import { calculateInvoiceTotal } from "./billing";
-import { calculateInvoiceTotals } from "@/lib/billing/generateInvoiceForJob";
+import { calculateInvoiceTotals } from "@/lib/billing/invoice-totals";
+import { assertInvoiceMatchesJob, assertJobBillCorrection } from "./job-invoice-approval";
 import { ApiAuthError } from "./auth";
 import type { z } from "zod";
 
@@ -429,6 +430,9 @@ export async function adminFinanceOperation(
         };
       }
       if (input.action === "record_payout") {
+        await assertInvoiceMatchesJob(invoice, undefined, session);
+        if (row.grossPaise !== paise(invoice.grandTotal))
+          throw new ApiAuthError("The invoice and recorded bill need reconciliation.", 409);
         const balance = ledgerBalances(row);
         if (
           row.paymentMode !== "servizato_online" ||
@@ -528,6 +532,11 @@ export async function adminFinanceOperation(
         };
       }
       if (input.action === "review_bill") {
+        if (input.resolution !== "request_confirmation") {
+          await assertInvoiceMatchesJob(invoice, undefined, session);
+          if (row.grossPaise !== paise(invoice.grandTotal))
+            throw new ApiAuthError("The invoice and recorded bill need reconciliation.", 409);
+        }
         if (input.resolution === "request_confirmation") {
           row.billState = "pending";
           row.confirmedAt = undefined;
@@ -673,6 +682,7 @@ export async function adminFinanceOperation(
           row.collectedPaise ||
           row.onlineReceivedPaise ||
           Number(invoice.amountPaid) > 0 ||
+          invoice.razorpayCheckoutChannel ||
           invoice.razorpayOrderId ||
           invoice.razorpayPaymentLinkId ||
           (await Payment.exists({
@@ -725,6 +735,7 @@ export async function adminFinanceOperation(
               input.discountAmount,
               input.taxPercent,
             );
+        await assertJobBillCorrection(invoice, { ...totals, items: invoice.items }, session);
         Object.assign(invoice, totals, {
           amountPaid: 0,
           balanceDue: totals.grandTotal,

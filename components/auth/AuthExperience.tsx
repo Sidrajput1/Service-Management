@@ -329,6 +329,14 @@ export function AuthExperience({ signup = false }: { signup?: boolean }) {
                   minLength={signup ? 6 : 1}
                   autoComplete={signup ? "new-password" : "current-password"}
                 />
+                {!signup && (
+                  <Link
+                    href="/forgot-password"
+                    className="inline-flex min-h-11 items-center rounded-sm text-sm font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                  >
+                    Forgot Password?
+                  </Link>
+                )}
               </>
             )}
             <Button
@@ -445,6 +453,7 @@ export function InitialPasswordChange() {
                 await api.post("/auth/change-password", {
                   currentPassword: fields.get("currentPassword"),
                   newPassword: fields.get("newPassword"),
+                  confirmPassword: fields.get("confirmation"),
                 });
                 await signOut({ redirect: false });
                 window.location.assign("/signin");

@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { CancellationPanel } from "@/components/finance/BookingActions";
 import { FinalBillPanel } from "@/components/finance/FinalBillPanel";
+import { RunningBillPanel } from "@/components/finance/RunningBillPanel";
+import { JobPartsActivity } from "@/components/finance/JobPartsActivity";
+import { ProviderQuotePanel, ProviderStartCodePanel } from "@/components/finance/JobQuotePanel";
 import { useParams, useRouter } from "next/navigation";
 
 import {
@@ -232,6 +235,10 @@ export default function ProviderAssignedJobDetailPage() {
 
       {booking?._id && <CancellationPanel bookingId={String(booking._id)}/>}
       {job.status === "completed" && invoice?._id && <FinalBillPanel invoiceId={String(invoice._id)}/>}
+      {job.status === "arrived" && <ProviderStartCodePanel jobId={jobId} />}
+      <ProviderQuotePanel jobId={jobId} />
+      {data.runningBill && <RunningBillPanel bill={data.runningBill} />}
+      <JobPartsActivity events={data.partsActivity || []} />
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         {/* LEFT */}
         <div className="space-y-6">
@@ -685,7 +692,7 @@ export default function ProviderAssignedJobDetailPage() {
                       variant="outline"
                       className="w-full rounded-xl"
                     >
-                      <Link href={`/service-provider/invoices/${invoice._id}`}>
+                      <Link href={`/service-provider/finance/invoices/${invoice._id}`}>
                         <FileText className="mr-2 h-4 w-4 inline" />
                         View Invoice
                       </Link>

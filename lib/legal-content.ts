@@ -43,6 +43,7 @@ export const privacyPolicy: LegalDocument = {
         "Registration asks for a name, email, telephone number and password. Provider registration also asks for business details. Providers can create Pro accounts linked to their team and issue initial credentials that the Pro is required to change.",
         "Passwords are processed to create or check password hashes. If Google sign-in is configured and selected, Google and the authentication service process the sign-in exchange and basic account identity/profile information; Servizato links the resulting account to its application profile. If SMS sign-in is configured, your telephone number is sent to Twilio to deliver a one-time code. Code records, expiry and use status are stored for verification.",
         "Sign-in also creates a session and records account role and credential status so that protected features can check access. A customer's service profile and saved contact/address information are distinct from the sign-in account; editing one does not necessarily change the other.",
+        "When password recovery email is configured, a reset request processes your email address, an expiring reset credential and temporary abuse-prevention counters. Servizato stores a hash of the reset token, account/credential references, a hashed recipient binding, expiry and use status. Resend processes the recipient email address and the reset-link email, or a password-change confirmation; these messages never include your password. Resetting or changing a password revokes prior account sessions.",
       ],
     },
     {
@@ -105,7 +106,7 @@ export const privacyPolicy: LegalDocument = {
       title: "Sharing and service providers",
       paragraphs: [
         "Information is shared within the service workflow with the relevant customer, provider business, assigned Pro and authorised operational staff. Public provider listings, business images, service coverage and rating summaries expose the information returned by marketplace discovery; private account or financial fields are not intended as public listing content.",
-        "The implemented integrations include MongoDB-backed application storage, Google sign-in and mapping/geocoding when configured, Twilio SMS when configured, Cloudinary uploads, Razorpay payments and browser-vendor push delivery. A feature's availability depends on the deployment configuration. These providers process the data needed for the feature and may apply their own notices and terms.",
+        "The implemented integrations include MongoDB-backed application storage, Google sign-in and mapping/geocoding when configured, Twilio SMS when configured, Resend password-recovery and security email when configured, Cloudinary uploads, Razorpay payments and browser-vendor push delivery. A feature's availability depends on the deployment configuration. These providers process the data needed for the feature and may apply their own notices and terms.",
         "Information may also need to be handled for a valid legal request or to investigate security or service problems, subject to applicable law. Actual hosting/database regions, processor contracts, subprocessors and international-transfer arrangements have not been confirmed in this review.",
       ],
       review:
@@ -116,6 +117,7 @@ export const privacyPolicy: LegalDocument = {
       title: "Data retention",
       paragraphs: [
         "The implementation retains account, service, communication, notification and financial records. It does not define a complete retention/deletion schedule for these categories or a general automatic account-erasure process. Login or OTP expiry controls whether a credential can be used; it does not establish when the underlying database record, backup or provider copy is deleted.",
+        "Password-reset links expire after 30 minutes and are single-use. Reset records and temporary password-abuse counters have expiry-based database cleanup indexes; cleanup can occur after expiry. These technical controls do not define retention of email-provider copies, infrastructure logs or backups.",
         "A final retention policy needs to account for service fulfilment, accounting and other applicable legal requirements, dispute handling and security, and must include media, backups and third-party copies. No fixed retention period or deletion deadline is promised in this review edition.",
       ],
       review:

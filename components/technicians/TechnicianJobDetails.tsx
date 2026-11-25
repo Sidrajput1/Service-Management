@@ -1,5 +1,7 @@
 "use client";
 import { FinalBillPanel } from "@/components/finance/FinalBillPanel";
+import { RunningBillPanel } from "@/components/finance/RunningBillPanel";
+import { paymentLabels } from "@/components/finance/FinanceUi";
 import { CancellationPanel } from "@/components/finance/BookingActions";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Session } from "next-auth";
@@ -244,6 +246,9 @@ function WorkflowContent({
     [proofFiles, setProofFiles] = useState<File[]>([]),
     [busy, setBusy] = useState<string | null>(null);
   const [gate] = useState(() => createTechnicianActionGate());
+  const [paymentChoice, setPaymentMode] = useState("");
+  const paymentMode = job.paymentMethod || booking?.paymentMethod || paymentChoice;
+  const [collected, setCollected] = useState(false);
   const mounted = useRef(true),
     uploaded = useRef(new Map<File, { url: string; public_id: string }>());
   useEffect(() => {
@@ -339,8 +344,8 @@ function WorkflowContent({
       void submitProof();
       return;
     }
-    if (action.key === "start" && otp.trim().length < 4) {
-      toast.error("Enter the OTP provided by the customer.");
+    if (action.key === "start" && !/^\d{6}$/.test(otp.trim())) {
+      toast.error("Enter the six-digit code provided by the customer.");
       return;
     }
     const execute =
@@ -350,7 +355,7 @@ function WorkflowContent({
           ? () => arrive.mutateAsync(job._id)
           : action.key === "start"
             ? () => start.mutateAsync({ id: job._id, otp: otp.trim() })
-            : () => complete.mutateAsync(job._id);
+            : () => complete.mutateAsync({ id: job._id, ...(action.key === "complete" ? { paymentMode, collected } : {}) });
     void runAction(
       action.key,
       execute,
@@ -631,6 +636,18 @@ function WorkflowContent({
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
                 {action?.description ||
+                  (data.verificationIssue === "locked"
+                    ? "Verification is locked after five incorrect codes. Ask your provider to issue a new code."
+                    : data.verificationIssue === "expired"
+                      ? "The verification code expired. Ask your provider to issue a new code."
+                      : data.verificationIssue
+                        ? "The verification code is unavailable. Ask your provider to review the job."
+                        : null) ||
+                  (data.quoteStatus === "pending_customer_approval"
+                    ? "Wait for the customer’s response to the revised quote before completing the job."
+                    : data.draftNeedsReview
+                      ? "Ask your provider to review the draft charges before completing the job."
+                      : null) ||
                   workflow.blockedReason ||
                   "The saved job is completed. Its service history and recorded billing information remain available below."}
               </p>
@@ -660,8 +677,8 @@ function WorkflowContent({
                             name="otp"
                             autoComplete="one-time-code"
                             inputMode="numeric"
-                            minLength={4}
-                            maxLength={12}
+                            minLength={6}
+                            maxLength={6}
                             value={otp}
                             onChange={(event) => setOtp(event.target.value)}
                             placeholder="Enter the customer's OTP"
@@ -671,12 +688,46 @@ function WorkflowContent({
                           />
                         </div>
                       )}
+                      {action.key === "complete" && (
+                        <div className="w-full space-y-3 sm:max-w-xs">
+                          <label className="block space-y-2 text-sm">
+                            <span>Payment method</span>
+                            <select
+                              required
+                              value={paymentMode}
+                              disabled={mutating || Boolean(job.paymentMethod || booking?.paymentMethod)}
+                              onChange={(event) => {
+                                setPaymentMode(event.target.value);
+                                setCollected(false);
+                              }}
+                              className="h-11 w-full rounded-md border bg-background px-3"
+                            >
+                              <option value="">Choose payment method</option>
+                              {Object.entries(paymentLabels).map(([value, label]) => (
+                                <option key={value} value={value}>{label}</option>
+                              ))}
+                            </select>
+                          </label>
+                          {["cash", "direct_upi"].includes(paymentMode) && (
+                            <label className="flex gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={collected}
+                                disabled={mutating}
+                                onChange={(event) => setCollected(event.target.checked)}
+                              />
+                              <span>Our team has collected the full bill directly from the customer.</span>
+                            </label>
+                          )}
+                        </div>
+                      )}
                       <Button
                         type="submit"
                         className="min-h-12 w-full whitespace-normal text-left sm:w-auto"
                         disabled={
                           mutating ||
-                          (action.key === "start" && otp.trim().length < 4)
+                          (action.key === "complete" && !paymentMode) ||
+                          (action.key === "start" && !/^\d{6}$/.test(otp.trim()))
                         }
                       >
                         {mutating ? (
@@ -869,15 +920,32 @@ function WorkflowContent({
               )}
             </CardContent>
           </Card>
+          {data.quoteStatus === "pending_customer_approval" && (
+            <p role="status" className="rounded-xl border p-4 text-sm">
+              Quote approval is pending. Continue only the authorized work and pause the proposed additional work.
+            </p>
+          )}
+          {Boolean(data.authorizedCharges?.length) && (
+            <section className="rounded-xl border p-4 text-sm">
+              <h2 className="font-semibold">Authorized additional work</h2>
+              <ul className="mt-2 list-inside list-disc space-y-1">
+                {data.authorizedCharges?.map((item, index) => (
+                  <li key={index}>{item.description} · {item.qty}</li>
+                ))}
+              </ul>
+            </section>
+          )}
           <JobPartsUsed
             key={`${job._id}:${JSON.stringify(job.partsUsed || [])}`}
             jobId={job._id}
             partsUsed={job.partsUsed || []}
             jobStatus={job.status}
+            partsVersion={job.partsVersion ?? 0}
             readOnly={!workflow.canManageParts || mutating}
             actionGate={gate}
             onBusyChange={(value) => setBusy(value ? "parts" : null)}
           />
+          {data.runningBill && <RunningBillPanel bill={data.runningBill} />}
         </div>
         <aside className="min-w-0 space-y-6">
           <Card className="rounded-2xl">

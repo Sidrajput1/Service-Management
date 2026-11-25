@@ -13,11 +13,7 @@ export const financeDate = (value?: string) =>
         timeStyle: "short",
       })
     : "—";
-export const paymentLabels: Record<string, string> = {
-  cash: "Cash paid to the service team",
-  direct_upi: "UPI paid directly to the service team",
-  servizato_online: "Online through Servizato",
-};
+export { paymentLabels } from "@/lib/payment-methods";
 export function financeError(error: unknown) {
   return isAxiosError(error) && typeof error.response?.data?.error === "string"
     ? error.response.data.error

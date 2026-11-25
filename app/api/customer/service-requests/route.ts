@@ -23,6 +23,7 @@ import type { IServiceProvider } from "@/models/ServiceProvider";
 import { catalogCategories } from "@/lib/catalog/definition.mjs";
 import { calculateOfferingPrice } from "@/lib/service-offering-price";
 import { isOfferCurrentlyActive } from "@/lib/service-offering-offer";
+import { notifyNewServiceRequest } from "@/lib/booking-request-notifications";
 
 export const runtime = "nodejs";
 import { apiFailure, privateJson } from "@/lib/api-response";
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
           },
           409,
         );
+      await notifyNewServiceRequest(existingRequest);
       return requestResponse(existingRequest, true);
     }
 
@@ -299,8 +301,10 @@ export async function POST(request: Request) {
           },
           409,
         );
+      await notifyNewServiceRequest(replay);
       return requestResponse(replay, true);
     }
+    await notifyNewServiceRequest(serviceRequest);
     return requestResponse(serviceRequest);
   } catch (error) {
     return apiFailure(error);

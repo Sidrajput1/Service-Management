@@ -3,22 +3,19 @@ import Booking from "@/models/booking";
 import Job from "@/models/job";
 import Technician from "@/models/technician";
 import { ApiAuthError } from "./auth";
-import { generateSixDigitOtp } from "./otp";
+import { jobOtpSelect, newJobOtp } from "./job-start-otp";
+import {
+  assignmentWindow,
+  proHasReservations,
+  requireAssignmentWindow,
+  reserveProWindow,
+} from "./job-scheduling";
 import { commissionForBooking } from "./finance-commission";
 import { canPerformService } from "./marketplace-policy.mjs";
 import { getJobNotificationRecipients } from "./notification-recipents";
 import { notifyJobAssigned } from "./notify-events";
 import { ensureJobConversation } from "./chat/ensure-job-conversation";
 import type { FinanceActor } from "./finance-ledger";
-const active = [
-  "scheduled",
-  "assigned",
-  "enroute",
-  "arrived",
-  "otp_verified",
-  "in_progress",
-  "on_hold",
-];
 export async function staffAssignJob(
   actor: FinanceActor,
   input: {
@@ -26,6 +23,7 @@ export async function staffAssignJob(
     jobId?: string;
     technicianId?: string;
     scheduledAt?: string;
+    scheduledEndAt?: string;
     notes?: string | null;
     proofRequired?: boolean;
   },
@@ -36,7 +34,7 @@ export async function staffAssignJob(
   try {
     const result = await session.withTransaction(async () => {
       const existing = input.jobId
-        ? await Job.findById(input.jobId).session(session)
+        ? await Job.findById(input.jobId).select(jobOtpSelect).session(session)
         : null;
       if (input.jobId && !existing)
         throw new ApiAuthError("Job not found", 404);
@@ -93,15 +91,6 @@ export async function staffAssignJob(
         );
       if (
         tech &&
-        (await Job.exists({
-          technicianId: tech._id,
-          status: { $in: active },
-          ...(existing ? { _id: { $ne: existing._id } } : {}),
-        }).session(session))
-      )
-        throw new ApiAuthError("This Pro already has an active job", 409);
-      if (
-        tech &&
         (booking.requiredSkillKeys || []).length &&
         !canPerformService(tech.skillKeys, booking.requiredSkillKeys)
       )
@@ -109,12 +98,25 @@ export async function staffAssignJob(
           "Choose a Pro with the service's required skills",
           409,
         );
-      if (
-        existing &&
-        String(existing.technicianId) === String(tech?._id) &&
-        existing.status === "assigned"
-      )
+      const window = assignmentWindow(booking, existing, input);
+      const samePro = Boolean(
+        existing && tech && String(existing.technicianId) === String(tech._id),
+      );
+      const sameWindow =
+        (!input.scheduledAt && !input.scheduledEndAt) ||
+        (window &&
+          +window.start === Number(existing?.scheduledAt) &&
+          +window.end === Number(existing?.scheduledEndAt));
+      if (existing && samePro && sameWindow)
         return { job: existing, booking, changed: false };
+      if (tech)
+        await reserveProWindow(
+          tech._id,
+          booking._id,
+          requireAssignmentWindow(window),
+          session,
+          existing?._id,
+        );
       if (!booking.commissionSnapshot)
         booking.commissionSnapshot = await commissionForBooking(
           booking.serviceProviderId,
@@ -140,49 +142,42 @@ export async function staffAssignJob(
           });
       job.technicianId = tech?._id;
       job.assignedBy = actor._id;
-      job.status = tech ? "assigned" : "scheduled";
-      job.scheduledAt = input.scheduledAt
-        ? new Date(input.scheduledAt)
-        : booking.scheduledAt;
+      if (!samePro) job.status = tech ? "assigned" : "scheduled";
+      job.scheduledAt =
+        window?.start ??
+        (input.scheduledAt
+          ? new Date(input.scheduledAt)
+          : (existing?.scheduledAt ?? booking.scheduledAt));
+      job.scheduledEndAt = window?.end;
       if (input.notes !== undefined) job.notes = input.notes || undefined;
       if (input.proofRequired !== undefined)
         job.proofRequired = input.proofRequired;
-      if (tech) {
-        job.otp = generateSixDigitOtp();
-        const expiry = new Date(
-          Math.max(Date.now(), job.scheduledAt?.getTime() || 0),
-        );
-        expiry.setHours(23, 59, 59, 999);
-        job.otpExpiresAt = expiry;
+      if (tech && !samePro) {
+        job.set({ ...newJobOtp(job.scheduledAt, job), otpLockedAt: undefined });
+      } else if (!tech) {
+        job.set({ otp: undefined, otpExpiresAt: undefined });
       }
-      job.arrivedAt = undefined;
-      job.acceptedAt = undefined;
-      job.arrivalTracking = undefined;
+      if (!samePro) {
+        job.arrivedAt = undefined;
+        job.acceptedAt = undefined;
+        job.arrivalTracking = undefined;
+      }
       await job.save({ session });
       booking.status = tech ? "assigned" : "confirmed";
       booking.technicianId = tech?._id;
+      if (tech) booking.scheduledAt = job.scheduledAt;
       await booking.save({ session });
-      if (tech)
-        await Technician.updateOne(
-          { _id: tech._id },
-          { $set: { status: "busy" } },
-          { session },
-        );
       if (
         oldTechId &&
         String(oldTechId) !== String(tech?._id) &&
-        !(await Job.exists({
-          technicianId: oldTechId,
-          status: { $in: active },
-          _id: { $ne: job._id },
-        }).session(session))
+        !(await proHasReservations(oldTechId, session))
       )
         await Technician.updateOne(
           { _id: oldTechId, status: "busy" },
           { $set: { status: "available" } },
           { session },
         );
-      return { job, booking, changed: true };
+      return { job, booking, changed: !samePro };
     });
     if (!result) throw new ApiAuthError("Assignment did not complete", 409);
     if (result.changed && result.job.technicianId) {
@@ -216,6 +211,7 @@ export async function staffAssignJob(
         serviceProviderId: job.serviceProviderId,
         status: job.status,
         scheduledAt: job.scheduledAt,
+        scheduledEndAt: job.scheduledEndAt,
         proofRequired: job.proofRequired,
       },
     };

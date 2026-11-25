@@ -1,6 +1,7 @@
 "use client";
 import { useBookings, useCreateBooking } from "@/hooks/useBookings";
 import { useCreateJob, useJobs } from "@/hooks/useJobs";
+import { ServiceWindowFields, enteredServiceWindow, localServiceTime, type ServiceWindowInput } from "@/components/technicians/ServiceWindowFields";
 import { useCustomers, useLeads, useTechnicians } from "@/hooks/useLead";
 import { zodResolver } from "@hookform/resolvers/zod";
 import React, { useMemo, useState } from "react";
@@ -300,6 +301,7 @@ function AdminBookingsPage() {
   const [search, setSearch] = useState("");
   const [jobBooking, setJobBooking] = useState<any>(null);
   const [jobTechnicianId, setJobTechnicianId] = useState("");
+  const [jobWindowInput, setJobWindowInput] = useState<ServiceWindowInput>();
   const [selectedSource, setSelectedSource] = useState("all");
 
   const { data: bookingsData, isLoading, refetch } = useBookings(page, 20);
@@ -450,7 +452,7 @@ function AdminBookingsPage() {
       await createJob.mutateAsync({
         bookingId: jobBooking._id,
         technicianId: jobTechnicianId || null,
-        scheduledAt: jobBooking.scheduledAt || null,
+        ...enteredServiceWindow(jobTechnicianId ? jobWindowInput : undefined, { scheduledAt: jobBooking.scheduledAt }),
         notes: `Created from booking ${jobBooking._id}`,
         proofRequired: true,
       });
@@ -459,7 +461,7 @@ function AdminBookingsPage() {
       setJobTechnicianId("");
       refetch?.();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to create job");
+      toast.error(error?.response?.data?.error || error?.message || "Failed to create job");
     }
   }
 
@@ -1490,7 +1492,11 @@ function AdminBookingsPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-44 rounded-2xl">
                                 <DropdownMenuItem
-                                  onClick={() => setJobBooking(booking)}
+                                  onClick={() => {
+                                    setJobBooking(booking);
+                                    setJobTechnicianId("");
+                                    setJobWindowInput(undefined);
+                                  }}
                                   className="rounded-xl"
                                   disabled={!!existingJob}
                                 >
@@ -1582,12 +1588,19 @@ function AdminBookingsPage() {
               >
                 <option value="">Select technician</option>
                 {(technicianData?.technicians || []).map((tech: any) => (
-                  <option key={tech._id} value={tech._id}>
+                  <option key={tech._id} value={tech._id} disabled={tech.status === "on_leave" || tech.isActive === false}>
                     {tech.userId?.name || tech.userId?.email || "Technician"} — {tech.status}
                   </option>
                 ))}
               </select>
             </div>
+
+            {jobTechnicianId && (
+              <ServiceWindowFields value={jobWindowInput ?? {
+                start: localServiceTime(jobBooking?.scheduledAt || jobBooking?.timeWindow?.from),
+                end: localServiceTime(jobBooking?.timeWindow?.to),
+              }} onChange={setJobWindowInput} />
+            )}
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
               A job will be created from this booking. If you select a technician, the job will be assigned immediately.

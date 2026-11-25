@@ -18,19 +18,8 @@ export function useInvoices(page = 1, limit = 20, status = "", q = "") {
 export function useCreateInvoiceFromJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: { jobId: string }) => {
       const { data } = await api.post("/invoices/from-job", payload);
-      return data;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
-  });
-}
-
-export function useAddInvoiceItems() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
-      const { data } = await api.post(`/invoices/${id}/items`, payload);
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
@@ -41,7 +30,7 @@ export function useFinalizeInvoice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data } = await api.post(`/invoices/${id}/finalize`);
+      const { data } = await api.post(`/invoices/${id}/finalize`, {});
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),

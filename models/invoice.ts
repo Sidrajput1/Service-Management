@@ -1,5 +1,6 @@
 // models/Invoice.ts
 import mongoose, { Schema, Document, Model } from "mongoose";
+import type { AppliedPromotion } from "@/lib/invoice-breakdown";
 
 export type InvoiceStatus =
   | "draft"
@@ -45,8 +46,12 @@ export interface IInvoice extends Document {
   issuedAt?: Date;
   dueDate?: Date;
   finalizedAt?: Date;
+  quotePricingSource?: "job";
+  appliedPromotion?: AppliedPromotion | null;
+  completionBilling?: boolean;
 
   razorpayOrderId?: string;
+  razorpayCheckoutChannel?: "order" | "payment_link";
   razorpayPaymentLinkId?: string;
   razorpayPaymentId?: string;
   razorpayReferenceId?: string;
@@ -105,7 +110,20 @@ const InvoiceSchema = new Schema<IInvoice>(
     issuedAt: Date,
     dueDate: Date,
     finalizedAt: Date,
+    completionBilling: Boolean,
+    quotePricingSource: { type: String, enum: ["job"] },
+    appliedPromotion: {
+      type: new Schema<AppliedPromotion>(
+        { name: String, code: String },
+        { _id: false },
+      ),
+      immutable: (invoice: IInvoice) =>
+        typeof invoice.isModified !== "function" ||
+        !invoice.isModified("finalizedAt"),
+      default: undefined,
+    },
     razorpayOrderId: { type: String, index: true },
+    razorpayCheckoutChannel: { type: String, enum: ["order", "payment_link"] },
     razorpayPaymentLinkId: { type: String, index: true },
     razorpayPaymentId: { type: String, index: true },
     razorpayReferenceId: { type: String, index: true },

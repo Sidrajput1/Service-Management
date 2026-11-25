@@ -31,9 +31,11 @@ type CreateNotificationInput = {
     | "customer"
     | "technician"
     | "service_provider"
-    | "service_offering";
+    | "service_offering"
+    | "service_request";
   entityId?: string;
   actionUrl?: string;
+  actionKind?: "pay_invoice";
   dedupeKey?: string;
   pushEvent?: PushEvent;
   metadata?: Record<string, any>;
@@ -54,6 +56,7 @@ export async function createNotification(input: CreateNotificationInput) {
     entityType: input.entityType,
     entityId: input.entityId,
     actionUrl: input.actionUrl,
+    actionKind: input.actionKind,
     metadata: input.metadata || {},
     pushEvent: input.pushEvent,
   };

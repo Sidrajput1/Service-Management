@@ -1,7 +1,8 @@
 import mongoose, { type ClientSession } from "mongoose";
 import Job, { type IJob } from "@/models/job";
-import Booking from "@/models/booking";
+import Booking, { type IBooking } from "@/models/booking";
 import Technician from "@/models/technician";
+import { jobOtpSelect } from "./job-start-otp";
 import { ApiAuthError } from "./auth";
 import { objectIdSchema } from "./pagination";
 
@@ -9,22 +10,22 @@ import { objectIdSchema } from "./pagination";
 export async function withAssignedJob<T>(
   jobId: string,
   technicianId: string,
-  operation: (value: { job: IJob; session: ClientSession }) => Promise<T>,
+  operation: (value: { job: IJob; booking: IBooking; session: ClientSession }) => Promise<T>,
 ): Promise<T> {
   objectIdSchema.parse(jobId);
   const session = await mongoose.startSession();
   try {
     const result = await session.withTransaction(async () => {
       const job = await Job.findOne({ _id: jobId, technicianId })
-        .select("+otp +otpExpiresAt")
+        .select(jobOtpSelect)
+        .select("+finalQuote")
         .session(session);
       if (!job) throw new ApiAuthError("Assigned job not found", 404);
       const tech = await Technician.findOne({
         _id: technicianId,
+        serviceProviderId: job.serviceProviderId,
         isActive: { $ne: false },
-      })
-        .select("_id")
-        .session(session);
+      }).select("_id").session(session);
       if (!tech) throw new ApiAuthError("Active Pro access required", 403);
       const booking = await Booking.findOne({
         _id: job.bookingId,
@@ -32,7 +33,7 @@ export async function withAssignedJob<T>(
         technicianId,
         status: "assigned",
       })
-        .select("_id")
+        .select("serviceType serviceOfferingId customerId pricing estimatedPrice notes paymentMethod")
         .session(session);
       if (!booking)
         throw new ApiAuthError(
@@ -53,7 +54,7 @@ export async function withAssignedJob<T>(
           "The booking assignment changed. Refresh before continuing.",
           409,
         );
-      return operation({ job, session });
+      return operation({ job, booking, session });
     });
     return result as T;
   } finally {

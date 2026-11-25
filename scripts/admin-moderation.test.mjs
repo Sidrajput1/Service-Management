@@ -450,6 +450,7 @@ test("public registration cannot select admin and direct customer signup hardcod
   const f = await fixture();
   let created;
   const registration = await load("../lib/registration.ts", {
+    "@/lib/password-policy": await load("../lib/password-policy.ts"),
     "@/lib/marketplace-policy.mjs": marketplace,
     "@/lib/marketplace-validation": f.validation,
   });

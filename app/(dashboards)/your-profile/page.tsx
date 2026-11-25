@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 import { toast } from "sonner";
+import { signOut } from "@/lib/push-client";
 import { useChangePassword, useProfile, useUpdateProfile } from "@/hooks/use-profile";
 
 function getInitials(name?: string) {
@@ -211,7 +212,8 @@ export default function ProfilePage() {
 
       setPasswordOpen(false);
 
-      toast.success("Password changed successfully");
+      toast.success("Password updated. Sign in again on all devices.");
+      await signOut({ callbackUrl: "/signin" });
     } catch (error: any) {
       toast.error(
         error?.response?.data?.error ||

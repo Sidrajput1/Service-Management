@@ -9,6 +9,9 @@ import {Customer,ServiceOffering,Technician,Booking} from "@/models/index";
 import Job from "@/models/job";
 import Invoice from "@/models/invoice";
 import JobProof from "@/models/jobProof";
+import JobPartEvent from "@/models/job-part-event";
+import { jobRunningBill } from "@/lib/job-running-bill";
+import { privateHeaders } from "@/lib/api-response";
 //import Customer from "@/models/customer";
 
 //import ServiceOffering from "@/models/ServiceOffering";
@@ -241,6 +244,22 @@ export async function GET(
       job,
       booking,
     );
+    if (invoice) timeline.push({
+      key: "invoice_generated",
+      title: "Final invoice generated",
+      description: invoice.invoiceNumber,
+      completed: true,
+      current: false,
+      timestamp: invoice.issuedAt,
+    });
+    if (invoice?.paymentReceivedAt) timeline.push({
+      key: "payment_received",
+      title: "Payment received",
+      description: "Payment has been recorded and verified.",
+      completed: true,
+      current: false,
+      timestamp: invoice.paymentReceivedAt,
+    });
 
     return NextResponse.json({
       success: true,
@@ -263,7 +282,9 @@ export async function GET(
       proofs,
 
       timeline,
-    });
+      runningBill: !invoice || invoice.status === "draft" ? await jobRunningBill(job, booking) : null,
+      partsActivity: await JobPartEvent.find({ jobId: job._id }).sort({ createdAt: 1, _id: 1 }).select("-requestHash").lean(),
+    }, { headers: privateHeaders });
   } catch (error: any) {
     console.error(
       "Provider assigned job detail error:",

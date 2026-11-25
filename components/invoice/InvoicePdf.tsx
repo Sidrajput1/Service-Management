@@ -1,14 +1,8 @@
 import React from "react";
 
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-
-type InvoiceItem = {
-  itemType: string;
-  description: string;
-  qty: number;
-  unitPrice: number;
-  amount: number;
-};
+import type { invoiceBreakdown } from "@/lib/invoice-breakdown";
+import { paymentLabels } from "@/lib/payment-methods";
 
 type InvoiceData = {
   invoiceNumber: string;
@@ -24,17 +18,13 @@ type InvoiceData = {
     serviceType?: string;
     scheduledAt?: string;
   };
-  items: InvoiceItem[];
-  subtotal: number;
-  discountAmount: number;
-  taxPercent: number;
-  taxAmount: number;
-  grandTotal: number;
+  breakdown: ReturnType<typeof invoiceBreakdown>;
   amountPaid: number;
   balanceDue: number;
   issuedAt?: string;
   dueDate?: string;
   notes?: string;
+  paymentMethod?: string;
 };
 
 // type InvoicePdfProps = {
@@ -136,12 +126,11 @@ const styles = StyleSheet.create({
   },
 });
 
-function money(v: number) {
-  return `₹${Number(v || 0).toFixed(2)}`;
-}
-
-
 export default function InvoicePdf({ invoice }: { invoice: InvoiceData }) {
+  const { items, rows, promotion, pricesIncludeDiscount, unreconciledDiscount } = invoice.breakdown;
+  // PDF's built-in Helvetica does not contain the rupee symbol.
+  const money = (value: number) =>
+    `${value < 0 ? "-" : ""}${invoice.currency || "INR"} ${Math.abs(value).toFixed(2)}`;
 
     return (
         <Document>
@@ -150,6 +139,7 @@ export default function InvoicePdf({ invoice }: { invoice: InvoiceData }) {
           <Text style={styles.title}>INVOICE</Text>
           <Text style={styles.subtitle}>Invoice No: {invoice.invoiceNumber}</Text>
           <Text style={styles.subtitle}>Status: {invoice.status}</Text>
+          {invoice.paymentMethod && <Text style={styles.subtitle}>Payment method: {paymentLabels[invoice.paymentMethod] || invoice.paymentMethod}</Text>}
         </View>
 
         <View style={styles.row}>
@@ -170,6 +160,8 @@ export default function InvoicePdf({ invoice }: { invoice: InvoiceData }) {
           </View>
         </View>
 
+        {promotion && <Text style={styles.subtitle}>Applied offer: {promotion}</Text>}
+        {pricesIncludeDiscount && <Text style={styles.subtitle}>Line prices include the discount shown in the totals.</Text>}
         <View style={styles.table}>
           <View style={[styles.tableRow, styles.tableHeader]}>
             <Text style={[styles.cell, styles.colType]}>Type</Text>
@@ -179,7 +171,7 @@ export default function InvoicePdf({ invoice }: { invoice: InvoiceData }) {
             <Text style={[styles.lastCell, styles.colAmt]}>Amount</Text>
           </View>
 
-          {invoice.items.map((item, idx) => (
+          {items.map((item, idx) => (
             <View key={idx} style={styles.tableRow}>
               <Text style={[styles.cell, styles.colType]}>{item.itemType}</Text>
               <Text style={[styles.cell, styles.colDesc]}>{item.description}</Text>
@@ -191,22 +183,12 @@ export default function InvoicePdf({ invoice }: { invoice: InvoiceData }) {
         </View>
 
         <View style={styles.summary}>
-          <View style={styles.summaryRow}>
-            <Text>Subtotal</Text>
-            <Text>{money(invoice.subtotal)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text>Discount</Text>
-            <Text>{money(invoice.discountAmount)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text>Tax ({invoice.taxPercent}%)</Text>
-            <Text>{money(invoice.taxAmount)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text>Grand Total</Text>
-            <Text>{money(invoice.grandTotal)}</Text>
-          </View>
+          {rows.map(({ label, amount }, index) => (
+            <View key={label} style={index === rows.length - 1 ? styles.totalRow : styles.summaryRow}>
+              <Text>{label}</Text>
+              <Text>{money(amount)}</Text>
+            </View>
+          ))}
           <View style={styles.summaryRow}>
             <Text>Amount Paid</Text>
             <Text>{money(invoice.amountPaid)}</Text>
@@ -216,6 +198,7 @@ export default function InvoicePdf({ invoice }: { invoice: InvoiceData }) {
             <Text>{money(invoice.balanceDue)}</Text>
           </View>
         </View>
+        {unreconciledDiscount && <Text style={styles.subtitle}>This older invoice lacks a verifiable discount breakdown.</Text>}
 
         {invoice.notes ? (
           <View style={styles.box}>

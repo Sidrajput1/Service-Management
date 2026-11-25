@@ -245,7 +245,7 @@ test("every existing mutation reconciles its exact authenticated detail and list
       { id: fixtureId, payload: { proofs: [] } },
       "proof",
     ],
-    ["useCompleteTechnicianJob", fixtureId, "complete"],
+    ["useCompleteTechnicianJob", { id: fixtureId, paymentMode: "servizato_online", collected: false }, "complete"],
   ]) {
     const mutation = fixture.hooks[name]();
     assert.equal(mutation.onMutate, undefined);

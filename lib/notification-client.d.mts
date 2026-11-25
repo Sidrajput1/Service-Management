@@ -6,6 +6,7 @@ export interface NotificationRecord {
   type: string;
   status: "read" | "unread";
   actionUrl?: string;
+  actionKind?: "pay_invoice";
   createdAt: string;
   readAt?: string;
   entityType?: string;
@@ -24,6 +25,10 @@ export function notificationBadge(count: unknown): {
 };
 export function notificationFeed(value: unknown): NotificationFeed;
 export function safeNotificationLink(value: unknown, role?: string): string;
+export function invoicePaymentNotificationLink(
+  item: Pick<NotificationRecord, "actionUrl" | "actionKind" | "entityType">,
+  role?: string,
+): string | null;
 export function notificationQueryOptions(
   userId: string | undefined,
   fetcher: (path: string, options: { signal: AbortSignal }) => Promise<unknown>,

@@ -1,195 +1,153 @@
-import { NextResponse } from "next/server";
-
+import { z } from "zod";
 import { requireRole, ApiAuthError } from "@/lib/auth";
-import { apiFailure } from "@/lib/api-response";
+import { apiFailure, privateJson } from "@/lib/api-response";
 import { withAssignedJob } from "@/lib/assigned-job-transaction";
 import { requireTechnicianProfile } from "@/lib/technician";
-import { connectToDb } from "@/lib/db";
-import Job from "@/models/job";
 import Booking from "@/models/booking";
 import Technician from "@/models/technician";
+import Invoice from "@/models/invoice";
+import { FinanceLedger, FinanceEvent } from "@/models/finance";
 import {
   notifyInvoiceIssued,
   notifyServiceCompleted,
 } from "@/lib/notify-events";
-import "@/models/customer";
-import "@/models/user";
 import { generateInvoiceForJob } from "@/lib/billing/generateInvoiceForJob";
 import { getJobNotificationRecipients } from "@/lib/notification-recipents";
+import { pricingForCompletion } from "@/lib/job-quotes";
+import { proHasReservations } from "@/lib/job-scheduling";
+import { requireFinanceReady } from "@/lib/finance-readiness";
+import { invoiceCanStartCheckout } from "@/lib/invoice-online-payment";
 
-// export async function POST(
-//   _: Request,
-//   { params }: { params: Promise<{ id: string }> },
-// ) {
-//   try {
-//     const { id } = await params;
-//     await requireRole(["technician"]);
-//     const { tech } = await requireTechnicianProfile();
-//     await connectToDb();
-
-//     const job = await Job.findById(id);
-//     if (!job) {
-//       return NextResponse.json({ error: "Job not found" }, { status: 404 });
-//     }
-
-//     if (String(job.technicianId) !== String(tech._id)) {
-//       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-//     }
-
-//     if (job.status !== "in_progress" && job.status !== "on_hold") {
-//       return NextResponse.json(
-//         { error: "Job must be in progress before completion" },
-//         { status: 400 },
-//       );
-//     }
-
-//     if (job.proofRequired && (!job.proofIds || job.proofIds.length === 0)) {
-//       return NextResponse.json(
-//         { error: "Proof is required before completing the job" },
-//         { status: 400 },
-//       );
-//     }
-
-//     job.status = "completed";
-
-//     const booking = await Booking.findById(job.bookingId).populate({
-//       path: "customerId",
-//       populate: { path: "userId" },
-//     });
-
-//     const customer: any = booking?.customerId;
-//     const customerUserId = customer?.userId?._id
-//       ? String(customer.userId._id)
-//       : null;
-
-//     if (customerUserId) {
-//       await notifyJobStatus({
-//         customerUserId,
-//         jobId: job._id.toString(),
-//         bookingId: String(job.bookingId),
-//         title: "Service completed",
-//         message: "Your service work has been completed",
-//       });
-//     }
-//     job.endTime = new Date();
-//     await job.save();
-
-//     const invoice = await generateInvoiceForJob(job._id);
-
-//     const otherActiveJobs = await Job.countDocuments({
-//       technicianId: tech._id,
-//       _id: { $ne: job._id },
-//       status: {
-//         $in: [
-//           "assigned",
-//           "accepted",
-//           "enroute",
-//           "arrived",
-//           "otp_verified",
-//           "in_progress",
-//           "on_hold",
-//         ],
-//       },
-//     });
-
-//     if (otherActiveJobs === 0) {
-//       tech.status = "available";
-//     }
-
-//     tech.jobsCompleted = (tech.jobsCompleted || 0) + 1;
-//     await tech.save();
-//     //const tech = await Technician.findById(job.technicianId);
-//     if (tech) {
-//       tech.lastCompletedWorkLocation = {
-//         type: "Point",
-//         coordinates: tech.currentLocation?.coordinates || [0, 0],
-//         updatedAt: new Date(),
-//         addressText: booking?.address?.addressLine || "",
-//         jobId: job._id,
-//       };
-//       await tech.save();
-//     }
-
-//     // return NextResponse.json({ job });
-//     return NextResponse.json({
-//       success: true,
-
-//       job: {
-//         id: job._id,
-//         status: job.status,
-//       },
-
-//       invoice: {
-//         id: invoice._id,
-//         invoiceNumber: invoice.invoiceNumber,
-//         status: invoice.status,
-//         grandTotal: invoice.grandTotal,
-//         amountPaid: invoice.amountPaid,
-//         balanceDue: invoice.balanceDue,
-//       },
-//     });
-//   } catch (err: any) {
-//     return NextResponse.json(
-//       { error: err.message || "Server error" },
-//       { status: err.status || 500 },
-//     );
-//   }
-// }
+const completeSchema = z
+  .object({
+    paymentMode: z.enum(["cash", "direct_upi", "servizato_online"]).optional(),
+    collected: z.boolean().default(false),
+  })
+  .strict();
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await params;
     await requireRole(["technician"]);
-    const { tech } = await requireTechnicianProfile();
-    await connectToDb();
-    const completion = await withAssignedJob(
+    const { tech, user } = await requireTechnicianProfile();
+    const { id } = await params;
+    const body = await request.text();
+    const input = completeSchema.parse(body ? JSON.parse(body) : {});
+    await requireFinanceReady();
+    await Invoice.init();
+    const { job, booking, invoice } = await withAssignedJob(
       id,
       String(tech._id),
-      async ({ job: assigned, session }) => {
-        if (!["in_progress", "on_hold", "completed"].includes(assigned.status))
+      async ({ job, booking, session }) => {
+        if (!["in_progress", "on_hold", "completed"].includes(job.status))
           throw new ApiAuthError(
             "Job must be in progress before completion",
             400,
           );
-        if (
-          assigned.status !== "completed" &&
-          assigned.proofRequired &&
-          !assigned.proofIds?.length
-        )
-          throw new ApiAuthError(
-            "Proof is required before completing the job",
-            400,
-          );
-        const transitioned = assigned.status !== "completed";
+        const transitioned = job.status !== "completed";
         if (transitioned) {
-          assigned.status = "completed";
-          assigned.endTime = new Date();
-          await assigned.save({ session });
-          const otherActiveJobs = await Job.countDocuments({
-            technicianId: tech._id,
-            _id: { $ne: assigned._id },
-            status: {
-              $in: [
-                "assigned",
-                "enroute",
-                "arrived",
-                "otp_verified",
-                "in_progress",
-                "on_hold",
-              ],
-            },
+          if (job.proofRequired && !job.proofIds?.length)
+            throw new ApiAuthError(
+              "Proof is required before completing the job",
+              400,
+            );
+          const existing = await Invoice.findOne({ jobId: job._id }).session(
+            session,
+          );
+          if (existing && existing.status !== "draft")
+            throw new ApiAuthError(
+              "This job already has an issued invoice. Ask support to review the service status.",
+              409,
+            );
+          const savedMode = booking.paymentMethod || job.paymentMethod;
+          const mode = savedMode || input.paymentMode;
+          if (
+            !mode ||
+            !["cash", "direct_upi", "servizato_online"].includes(mode)
+          )
+            throw new ApiAuthError(
+              "Choose the payment method before completing this service.",
+              400,
+            );
+          if (savedMode && input.paymentMode && input.paymentMode !== savedMode)
+            throw new ApiAuthError(
+              "The payment method changed. Refresh the booking before completing it.",
+              409,
+            );
+          if (mode === "servizato_online" && input.collected)
+            throw new ApiAuthError(
+              "Online payments are confirmed by Razorpay.",
+              400,
+            );
+          job.finalQuote = await pricingForCompletion(job, booking, session);
+          job.status = "completed";
+          job.endTime = new Date();
+          job.paymentMethod = mode;
+          await job.save({ session });
+        }
+        const invoice = await generateInvoiceForJob(job._id, {
+          job,
+          booking,
+          session,
+        });
+        if (transitioned) {
+          invoice.completionBilling = true;
+          invoice.paymentMethod = job.paymentMethod;
+          await invoice.save({ session });
+          const row = await FinanceLedger.findOne({
+            invoiceId: invoice._id,
           }).session(session);
+          if (!row || row.billState !== "not_submitted")
+            throw new ApiAuthError(
+              "The saved bill needs an administrative review before completion.",
+              409,
+            );
+          row.paymentMode = job.paymentMethod as
+            | "cash"
+            | "direct_upi"
+            | "servizato_online";
+          row.billState = "pending";
+          row.claimedCollectedPaise = input.collected ? row.grossPaise : 0;
+          row.paymentState =
+            row.grossPaise === 0
+              ? "not_required"
+              : input.collected
+                ? "claimed"
+                : "unpaid";
+          row.submittedBy = user._id;
+          row.submittedAt = new Date();
+          await row.save({ session });
+          await FinanceEvent.updateOne(
+            { dedupeKey: `completion-bill:${invoice._id}` },
+            {
+              $setOnInsert: {
+                kind: "bill_submitted",
+                actorId: user._id,
+                actorRole: "technician",
+                invoiceId: invoice._id,
+                ledgerId: row._id,
+                providerId: job.serviceProviderId,
+                details: {
+                  invoiceVersion: row.invoiceVersion,
+                  paymentMode: row.paymentMode,
+                  grossPaise: row.grossPaise,
+                  claimedCollectedPaise: row.claimedCollectedPaise,
+                  source: "job_completion",
+                },
+              },
+            },
+            { upsert: true, session },
+          );
+          await Booking.updateOne(
+            { _id: booking._id },
+            { $set: { paymentMethod: job.paymentMethod } },
+            { session },
+          );
           const counted = await Technician.updateOne(
             { _id: tech._id, isActive: { $ne: false } },
-            {
-              $inc: { jobsCompleted: 1 },
-              ...(otherActiveJobs === 0
-                ? { $set: { status: "available" } }
-                : {}),
-            },
+            { $inc: { jobsCompleted: 1 } },
             { session },
           );
           if (counted.matchedCount !== 1)
@@ -197,52 +155,42 @@ export async function POST(
               "Active Pro profile changed. Refresh before continuing.",
               409,
             );
+          if (!(await proHasReservations(tech._id, session)))
+            await Technician.updateOne(
+              { _id: tech._id, status: "busy" },
+              { $set: { status: "available" } },
+              { session },
+            );
         }
-        return { job: assigned, transitioned };
+        return { job, booking, invoice };
       },
     );
-    const { job } = completion;
-    const booking = await Booking.findById(job.bookingId).populate({
-      path: "customerId",
-      populate: { path: "userId" },
-    });
-    if (!booking)
-      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
-    const recipients = await getJobNotificationRecipients(String(job._id));
-    // Existing recipient-scoped notification dedupe makes partial delivery safely retryable.
-    await notifyServiceCompleted({
-      customerUserId: recipients.customerUserId || undefined,
-      providerUserId: recipients.providerUserId || undefined,
-      technicianUserId: recipients.technicianUserId || undefined,
-      jobId: String(job._id),
-      bookingId: String(job.bookingId),
-      serviceName: booking.serviceType,
-    });
-    // Legacy global Pro coordinates have no trusted job provenance. Preserve the
-    // existing last-work location; Job.endTime records completion without inventing GPS.
-    // A completed replay may repair a failed invoice operation without completing work again.
-    let invoice;
     try {
-      invoice = await generateInvoiceForJob(job._id);
+      const recipients = await getJobNotificationRecipients(String(job._id));
+      const canPayOnline = await invoiceCanStartCheckout(invoice);
+      await Promise.all([
+        notifyServiceCompleted({
+          customerUserId: recipients.customerUserId || undefined,
+          providerUserId: recipients.providerUserId || undefined,
+          technicianUserId: recipients.technicianUserId || undefined,
+          jobId: String(job._id),
+          bookingId: String(job.bookingId),
+          serviceName: booking.serviceType,
+        }),
+        notifyInvoiceIssued({
+          customerUserId: recipients.customerUserId || undefined,
+          providerUserId: recipients.providerUserId || undefined,
+          invoiceId: String(invoice._id),
+          bookingId: String(booking._id),
+          invoiceNumber: invoice.invoiceNumber,
+          amount: invoice.balanceDue,
+          canPayOnline,
+        }),
+      ]);
     } catch {
-      console.error("Invoice generation failed after job completion.");
-      return NextResponse.json(
-        {
-          error:
-            "The service is complete, but its invoice could not be generated. Retry invoice generation.",
-        },
-        { status: 500 },
-      );
+      console.error("Completion saved. Notification delivery failed.");
     }
-    await notifyInvoiceIssued({
-      customerUserId: recipients.customerUserId || undefined,
-      providerUserId: recipients.providerUserId || undefined,
-      invoiceId: String(invoice._id),
-      bookingId: String(booking._id),
-      invoiceNumber: invoice.invoiceNumber,
-      amount: invoice.balanceDue,
-    });
-    return NextResponse.json({
+    return privateJson({
       success: true,
       job: { id: job._id, status: job.status, invoiceId: invoice._id },
       invoice: {

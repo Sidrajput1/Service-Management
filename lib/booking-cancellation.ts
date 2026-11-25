@@ -9,6 +9,7 @@ import { financeTransaction, type FinanceActor } from "./finance-ledger";
 import { validCancellationReason } from "./finance-policy.mjs";
 import { ApiAuthError } from "./auth";
 import { createNotification } from "./notification";
+import { proHasReservations } from "./job-scheduling";
 
 export async function cancellationContext(
   bookingId: string,
@@ -120,30 +121,14 @@ export async function cancelBooking(
             "The job changed. Refresh before cancelling.",
             409,
           );
-        if (
-          job.technicianId &&
-          !(await Job.exists({
-            _id: { $ne: job._id },
-            technicianId: job.technicianId,
-            status: {
-              $in: [
-                "scheduled",
-                "assigned",
-                "enroute",
-                "arrived",
-                "otp_verified",
-                "in_progress",
-                "on_hold",
-              ],
-            },
-          }).session(session))
-        )
-          await Technician.updateOne(
-            { _id: job.technicianId, status: "busy" },
-            { $set: { status: "available" } },
-            { session },
-          );
       }
+      const proId = job?.technicianId ?? booking.technicianId;
+      if (proId && !(await proHasReservations(proId, session)))
+        await Technician.updateOne(
+          { _id: proId, status: "busy" },
+          { $set: { status: "available" } },
+          { session },
+        );
       const [record] = await CancellationCase.create(
         [
           {

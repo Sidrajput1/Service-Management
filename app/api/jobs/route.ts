@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { apiFailure, privateJson } from "@/lib/api-response";
 import { assertFinanceWrite } from "@/lib/finance-security";
 import { staffAssignJob } from "@/lib/staff-job-assignment";
+import { scheduleDateSchema } from "@/lib/job-scheduling";
 import { objectIdSchema } from "@/lib/pagination";
 import { z } from "zod";
 
@@ -13,7 +14,8 @@ import '@/models/customer';
 const JobCreateSchema = z.object({
   bookingId: objectIdSchema,
   technicianId: objectIdSchema.optional().nullable(),
-  scheduledAt: z.string().optional().nullable(),
+  scheduledAt: scheduleDateSchema.optional().nullable(),
+  scheduledEndAt: scheduleDateSchema.optional().nullable(),
   notes: z.string().optional().nullable(),
   proofRequired: z.boolean().optional(),
 });
@@ -46,6 +48,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  try { const {user}=await requireRole(["admin","dispatcher"]); assertFinanceWrite(request); const parsed=JobCreateSchema.parse(await request.json()); return privateJson(await staffAssignJob(user,{bookingId:parsed.bookingId,technicianId:parsed.technicianId||undefined,scheduledAt:parsed.scheduledAt||undefined,notes:parsed.notes,proofRequired:parsed.proofRequired}),201); }
-  catch(error){return apiFailure(error);}
+  try {
+    const { user } = await requireRole(["admin", "dispatcher"]);
+    assertFinanceWrite(request);
+    const parsed = JobCreateSchema.parse(await request.json());
+    return privateJson(await staffAssignJob(user, {
+      ...parsed,
+      technicianId: parsed.technicianId ?? undefined,
+      scheduledAt: parsed.scheduledAt ?? undefined,
+      scheduledEndAt: parsed.scheduledEndAt ?? undefined,
+    }), 201);
+  } catch (error) {
+    return apiFailure(error);
+  }
 }

@@ -1,4 +1,5 @@
 import type { Address } from "@/lib/customer-types";
+import type { QuoteLine, QuoteStatus } from "@/models/job-quote";
 
 export interface TechnicianWorkflowCapabilities {
   access: "active" | "read_only";
@@ -27,11 +28,15 @@ export interface TechnicianJobProof {
   createdAt?: string;
 }
 export interface TechnicianJobPart {
+  partId?: string;
+  source?: "on_site";
+  note?: string;
   partName: string;
   qty: number;
   price?: number;
 }
 export interface TechnicianBookingSnapshot {
+  paymentMethod?: string;
   _id: string;
   serviceType?: string;
   subService?: string;
@@ -57,6 +62,7 @@ export interface TechnicianJob {
   bookingId?: TechnicianBookingSnapshot | null;
   technicianId?: string | null;
   scheduledAt?: string;
+  scheduledEndAt?: string;
   createdAt?: string;
   updatedAt?: string;
   acceptedAt?: string;
@@ -69,6 +75,7 @@ export interface TechnicianJob {
   proofRequired?: boolean;
   proofIds?: Array<TechnicianJobProof | string>;
   partsUsed?: TechnicianJobPart[];
+  partsVersion?: number;
   notes?: string;
   paymentStatus?: string;
   paymentReceivedAt?: string;
@@ -76,9 +83,14 @@ export interface TechnicianJob {
   invoiceId?: string | { _id: string; invoiceNumber?: string } | null;
 }
 export interface TechnicianJobDetailResponse {
+  runningBill?: import("./job-running-bill").RunningBill | null;
   job: TechnicianJob;
   journey?: TechnicianJourney;
   workflow?: TechnicianWorkflowCapabilities;
+  verificationIssue?: "locked" | "expired" | "unavailable" | "used" | null;
+  quoteStatus?: QuoteStatus | null;
+  draftNeedsReview?: boolean;
+  authorizedCharges?: QuoteLine[];
 }
 export interface TechnicianProofPayload {
   proofNote?: string;

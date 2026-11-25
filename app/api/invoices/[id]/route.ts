@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { calculateInvoiceTotal, recomputeBalance } from "@/lib/billing";
 import Job from "@/models/job";
 import { assertInvoiceMutable } from "@/lib/finance-ledger";
+import { invoiceBreakdown } from "@/lib/invoice-breakdown";
 const UpdateInvoiceSchema = z.object({
     notes: z.string().optional(),
   discountAmount: z.coerce.number().optional(),
@@ -21,7 +22,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         const {id} = await params
         const invoice = await Invoice.findById(id)
       .populate("jobId")
-      .populate("bookingId")
+      .populate<{ bookingId: { pricing?: import("@/models/booking").IBooking["pricing"] } | null }>("bookingId")
       .populate("customerId")
       .populate("createdBy");
 
@@ -29,7 +30,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ invoice });
+    return NextResponse.json({ invoice, breakdown: invoiceBreakdown(invoice, invoice.bookingId?.pricing) });
     } catch (err:any) {
         return NextResponse.json({ error: err.message || "Server error" }, { status: err.status || 500 });
     }
@@ -54,6 +55,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (parsed.notes !== undefined) invoice.notes = parsed.notes;
     await assertInvoiceMutable(invoice);
+    if (invoice.jobId && parsed.status === "issued")
+      return NextResponse.json({ error: "Finalize the draft from the completed job's authorized quote." }, { status: 409 });
     if (parsed.status) invoice.status = parsed.status;
     if (parsed.discountAmount !== undefined) invoice.discountAmount = parsed.discountAmount;
     if (parsed.taxPercent !== undefined) invoice.taxPercent = parsed.taxPercent;

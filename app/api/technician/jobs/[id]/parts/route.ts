@@ -1,140 +1,44 @@
-import { requireRole } from "@/lib/auth";
-import { apiFailure } from "@/lib/api-response";
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-
-import { authOptions } from "@/lib/auth-options";
-import { connectToDb } from "@/lib/db";
-
-import { Technician } from "@/models";
+import { requireRole, ApiAuthError } from "@/lib/auth";
+import { apiFailure, privateJson } from "@/lib/api-response";
+import { requireTechnicianProfile } from "@/lib/technician";
+import { addJobPartSchema, changeAssignedJobPart } from "@/lib/job-parts";
+import { objectIdSchema } from "@/lib/pagination";
 import Job from "@/models/job";
+import PriceItem from "@/models/PriceItem";
 
-export const runtime = "nodejs";
-
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { tech } = await requireTechnicianProfile();
+    const id = objectIdSchema.parse((await params).id);
+    if (!(await Job.exists({ _id: id, technicianId: tech._id })))
+      throw new ApiAuthError("Assigned job not found", 404);
+    const items = await PriceItem.find({ itemType: "part", isActive: true })
+      .select("name price unit")
+      .sort({ name: 1 })
+      .limit(500)
+      .lean();
+    return privateJson({ items });
+  } catch (error) {
+    return apiFailure(error);
+  }
+}
 export async function POST(
   request: Request,
-  {
-    params,
-  }: {
-    params: Promise<{ id: string }>;
-  },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await requireRole(["technician"]);
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized",
-        },
-        {
-          status: 401,
-        },
-      );
-    }
-
-    await connectToDb();
-
-    const technician = await Technician.findOne({
-      userId: session.user.id,
-      isActive: true,
-    });
-
-    if (!technician) {
-      return NextResponse.json(
-        {
-          error: "Technician profile not found",
-        },
-        {
-          status: 404,
-        },
-      );
-    }
-
+    const { tech, user } = await requireTechnicianProfile();
     const { id } = await params;
-
-    const body = await request.json();
-
-    const partName = String(body.partName || "").trim();
-
-    const qty = Number(body.qty);
-
-    const price = Number(body.price);
-
-    if (!partName) {
-      return NextResponse.json(
-        {
-          error: "Part name is required",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    if (!Number.isFinite(qty) || qty <= 0) {
-      return NextResponse.json(
-        {
-          error: "Quantity must be greater than zero",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    if (!Number.isFinite(price) || price < 0) {
-      return NextResponse.json(
-        {
-          error: "Invalid part price",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    const job = await Job.findOne({
-      _id: id,
-
-      technicianId: technician._id,
-
-      status: {
-        $in: ["otp_verified", "in_progress", "on_hold"],
-      },
-    });
-
-    if (!job) {
-      return NextResponse.json(
-        {
-          error: "Parts can only be added while the service is active",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    const existingParts = Array.isArray(job.partsUsed)
-      ? [...job.partsUsed]
-      : [];
-
-    existingParts.push({
-      partName,
-      qty,
-      price,
-    });
-
-    job.partsUsed = existingParts as any;
-
-    await job.save();
-
-    return NextResponse.json({
-      success: true,
-
-      partsUsed: job.partsUsed,
-    });
+    return privateJson(
+      await changeAssignedJobPart(id, String(tech._id), user, {
+        action: "part_added",
+        input: addJobPartSchema.parse(await request.json()),
+      }),
+    );
   } catch (error) {
     return apiFailure(error);
   }

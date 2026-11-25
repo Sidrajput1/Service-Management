@@ -6,7 +6,12 @@ import { randomBytes } from "node:crypto";
 import { connectToDb } from "@/lib/db";
 import User from "@/models/user";
 import Otp from "@/models/otp";
-import { deactivatePushSession, newPushSessionId, pushSessionHash } from "@/lib/push-session";
+import { currentCredentialAccount } from "@/lib/credential-session";
+import {
+  deactivatePushSession,
+  newPushSessionId,
+  pushSessionHash,
+} from "@/lib/push-session";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -24,7 +29,12 @@ export const authOptions: NextAuthOptions = {
         otp: { label: "OTP", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials) throw new Error("Missing credentials");
+        
+        console.log("[NextAuth Authorize]", {
+    hasMongoUri: Boolean(process.env.MONGODB_URI),
+    pid: process.pid,
+  });
+      if (!credentials) throw new Error("Missing credentials");
         await connectToDb();
 
         if (credentials.email && credentials.password) {
@@ -33,7 +43,9 @@ export const authOptions: NextAuthOptions = {
             isActive: { $ne: false },
           });
           if (!user) throw new Error("User not found");
-          const ok = await bcrypt.compare(credentials.password, user.password);
+          const ok =
+            typeof user.password === "string" &&
+            (await bcrypt.compare(credentials.password, user.password));
           if (!ok) throw new Error("Invalid credentials");
           if (
             user.mustChangePassword &&
@@ -172,8 +184,10 @@ export const authOptions: NextAuthOptions = {
         }
 
         return true;
-      } catch (error) {
-        console.error("signIn callback error:", error);
+      } catch {
+        console.error(
+          "Sign-in could not be completed; no account or credential details were logged.",
+        );
 
         return false;
       }
@@ -193,17 +207,13 @@ export const authOptions: NextAuthOptions = {
         token.phone = user.phone ?? null;
 
         token.name = user.name;
-
-        return token;
       }
 
       // Older trusted sessions acquire a private push association on their next refresh.
-      if (token.id && !pushSessionHash(token.pushSessionId)) token.pushSessionId = newPushSessionId();
+      if (token.id && !pushSessionHash(token.pushSessionId))
+        token.pushSessionId = newPushSessionId();
       try {
-        if (
-          token.email &&
-          (!token.id || !token.role || token.phone === undefined)
-        ) {
+        if (token.email && !token.id) {
           await connectToDb();
 
           const dbUser = await User.findOne({
@@ -213,7 +223,7 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.id = dbUser._id.toString();
 
-            token.role = dbUser.role;
+            token.role ||= dbUser.role;
 
             token.email = dbUser.email;
 
@@ -222,8 +232,13 @@ export const authOptions: NextAuthOptions = {
             token.name = dbUser.name;
           }
         }
-      } catch (error) {
-        console.error("jwt callback DB fetch error:", error);
+        const current = await currentCredentialAccount(token);
+        if (!current) throw new Error("Session requires reauthentication");
+        token.role ||= current.role;
+        token.mustChangePassword = Boolean(current.mustChangePassword);
+      } catch {
+        // NextAuth v4 clears the cookie and returns no session when its JWT callback throws.
+        throw new Error("Session requires reauthentication");
       }
 
       return token;

@@ -10,6 +10,7 @@ import "@/models/booking";
 import "@/models/customer";
 import { objectIdSchema } from "@/lib/pagination";
 import { apiFailure } from "@/lib/api-response";
+import { invoiceBreakdown } from "@/lib/invoice-breakdown";
 
 
 export async function GET( _: Request, { params }: { params: Promise<{ id: string }> }){
@@ -38,6 +39,7 @@ export async function GET( _: Request, { params }: { params: Promise<{ id: strin
     const pdfData = {
       invoiceNumber: invoice.invoiceNumber,
       status: invoice.status,
+      paymentMethod: invoice.paymentMethod,
       currency: invoice.currency,
       customer: {
         name: customer?.name || "",
@@ -56,12 +58,7 @@ export async function GET( _: Request, { params }: { params: Promise<{ id: strin
           ? new Date(booking.scheduledAt).toLocaleString()
           : "",
       },
-      items: invoice.items,
-      subtotal: invoice.subtotal,
-      discountAmount: invoice.discountAmount,
-      taxPercent: invoice.taxPercent,
-      taxAmount: invoice.taxAmount,
-      grandTotal: invoice.grandTotal,
+      breakdown: invoiceBreakdown(invoice, booking?.pricing),
       amountPaid: invoice.amountPaid,
       balanceDue: invoice.balanceDue,
       issuedAt: invoice.issuedAt ? new Date(invoice.issuedAt).toLocaleString() : "",

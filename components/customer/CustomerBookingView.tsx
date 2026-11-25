@@ -17,6 +17,8 @@ import { ServiceAddressPreview } from "@/components/maps/ServiceAddressPreview";
 import { useJobStatusConnection } from "@/hooks/useJobStatusConnection";
 import { dateTime, proCopy, type BookingDetail } from "@/lib/customer-types";
 import { FinalBillPanel } from "@/components/finance/FinalBillPanel";
+import { CustomerQuotePanel } from "@/components/finance/JobQuotePanel";
+import { RunningBillPanel } from "@/components/finance/RunningBillPanel";
 import { CancellationPanel, RepeatBookingButton } from "@/components/finance/BookingActions";
 export function CustomerBookingView({ id }: { id: string }) {
   const query = useNewCustomerBooking(id);
@@ -56,12 +58,12 @@ export function CustomerBookingView({ id }: { id: string }) {
                 role="status"
                 className="mb-6 customer-panel bg-secondary/40 text-sm leading-7"
               >
-                Your Pro has arrived at the service address. Share the visit
-                verification code only when you are ready to begin.
+                Your Pro has arrived at the service address.
+                {data.job.otp && " Share the visit verification code only when you are ready to begin."}
               </p>
             )}
-            <div className="grid items-start gap-6 lg:grid-cols-[1.35fr_1fr]">
-              <div className="space-y-6">
+            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+              <div className="min-w-0 space-y-6">
                 <section className="customer-panel">
                   <h2 className="font-display text-lg font-semibold">
                     Your service
@@ -81,6 +83,7 @@ export function CustomerBookingView({ id }: { id: string }) {
                           {dateTime(
                             data.job?.scheduledAt || data.booking.scheduledAt,
                           )}
+                          {data.job?.scheduledEndAt && ` to ${dateTime(data.job.scheduledEndAt)}`}
                         </p>
                       </div>
                     </div>
@@ -106,6 +109,19 @@ export function CustomerBookingView({ id }: { id: string }) {
                     Booking reference: {id}
                   </p>
                 </section>
+                {data.quote && (
+                  <CustomerQuotePanel key={data.quote.version} bookingId={id} quote={data.quote}
+                    canRespond={data.booking.status === "assigned" && Boolean(data.job && !["completed", "cancelled"].includes(data.job.status)) && !query.isError}
+                    refresh={() => void query.refetch()} />
+                )}
+                {data.invoice && (
+                  <FinalBillPanel invoiceId={data.invoice._id} checkout={{
+                    customer: data.customer,
+                    disabled: query.isError || data.booking.status === "cancelled" ||
+                      data.quote?.status === "pending_customer_approval",
+                  }} />
+                )}
+                {data.runningBill && <RunningBillPanel bill={data.runningBill} />}
                 <section className="customer-panel">
                   <h2 className="mb-5 font-display text-lg font-semibold">
                     Job progress
@@ -186,6 +202,14 @@ export function CustomerBookingView({ id }: { id: string }) {
                       </p>
                     </section>
                   )}
+                {data.verification && (
+                  <section className="customer-panel bg-secondary/40">
+                    <h2 className="text-sm font-bold">Visit verification</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">{data.verification === "locked"
+                      ? "Verification is locked. Ask your provider to issue a new code."
+                      : "The visit code is unavailable. Ask your provider for help if the Pro is ready to start."}</p>
+                  </section>
+                )}
                 <ServiceAddressPreview address={data.booking.address} />
                 <section className="customer-panel">
                   <h2 className="flex items-center gap-2 text-sm font-bold">
@@ -206,7 +230,6 @@ export function CustomerBookingView({ id }: { id: string }) {
                     </Link>
                   )}
                 </section>
-                {data.invoice && <FinalBillPanel invoiceId={data.invoice._id}/>}
                 {data.job?.status === "completed" && <RepeatBookingButton bookingId={id}/>}
                 <CancellationPanel bookingId={id}/>
                 <p className="px-2 text-xs leading-6 text-muted-foreground">

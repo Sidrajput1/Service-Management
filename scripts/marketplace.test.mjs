@@ -9,6 +9,7 @@ import * as serviceLocation from "../lib/service-location.mjs";
 import * as moderation from "../lib/moderation-policy.mjs";
 import * as policy from "../lib/marketplace-policy.mjs";
 import * as catalog from "../lib/catalog/definition.mjs";
+import { createPasswordFixture, installPasswordTestEnv } from "./helpers/password-fixture.mjs";
 
 const require = createRequire(import.meta.url);
 async function load(path, modules = {}) {
@@ -572,30 +573,27 @@ test("mandatory password change, credential version revocation and expiry are en
     (error) => error.status === 401,
   );
 });
-test("actual first-password change verifies current password and atomically hashes/revokes the credential", async () => {
+test("actual first-password change verifies current password and atomically hashes/revokes the credential", async (t) => {
+  t.after(installPasswordTestEnv());
   const currentPassword = "Sv!test-only-initial",
     password = await bcrypt.hash(currentPassword, 4);
   let changed;
-  const handler = await load("../app/api/auth/change-password/route.ts", {
-    ...scoped,
-    "@/lib/auth": { requireCurrentUser: async () => ({ _id: id("1") }) },
-    "@/models/user": {
-      findOne: async () => ({ _id: id("1"), password, credentialVersion: 1 }),
-      findOneAndUpdate: async (filter, update) => {
-        assert.equal(filter.password, password);
-        assert.equal(filter.credentialVersion, 1);
-        changed = update;
-        return {};
-      },
-    },
-  });
+  const f = createPasswordFixture();
+  Object.assign(f.state.users[0], { password, credentialVersion: 1, mustChangePassword: true, temporaryPasswordExpiresAt: new Date(Date.now() + 60_000) });
+  f.state.actor = { ...f.state.users[0] };
+  const update = f.User.updateOne;
+  f.User.updateOne = async (filter, mutation, options) => {
+    assert.equal(filter.password, password);
+    assert.equal(filter.credentialVersion, 1);
+    changed = mutation;
+    return update(filter, mutation, options);
+  };
+  const handler = f.load("app/api/auth/change-password/route.ts");
   const request = (current) =>
-    new Request("http://test", {
-      method: "POST",
-      body: JSON.stringify({
+    f.request({
         currentPassword: current,
         newPassword: "My strong personal password",
-      }),
+        confirmPassword: "My strong personal password",
     });
   assert.equal((await handler.POST(request("wrong"))).status, 400);
   assert.equal(changed, undefined);
@@ -673,7 +671,11 @@ test("assignment rejects a foreign Pro before any job is created", async () => {
     {
       ...scoped,
       mongoose: { startSession: async () => session },
-      "@/lib/otp": { generateSixDigitOtp: () => "123456" },
+      "@/lib/job-start-otp": {},
+      "@/lib/job-scheduling": {
+        scheduleDateSchema: (await import("zod")).z.iso.datetime({ offset: true }),
+      },
+      "@/lib/finance-security": { assertFinanceWrite: () => {} },
       "@/models/booking": {
         findOne: (filter) => {
           assert.equal(filter.serviceProviderId, ownerId);
@@ -738,6 +740,7 @@ test("actual booking requests assess flexible coverage, enforce active catalog a
   const price = await load("../lib/service-offering-price.ts");
   const handler = await load("../app/api/customer/service-requests/route.ts", {
     ...scoped,
+    "@/lib/booking-request-notifications": { notifyNewServiceRequest: async () => {} },
     "next-auth": { getServerSession: async () => ({ user: { id: id("3") } }) },
     "@/lib/auth-options": { authOptions: {} },
     "@/lib/db": { connectToDb: async () => {} },

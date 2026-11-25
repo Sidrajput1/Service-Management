@@ -160,6 +160,8 @@ test("actual invoice handler scopes Customer B's ID to Customer A and returns no
   let filter;
   const handler = await load("../app/api/customer/invoices/[id]/route.ts", {
     ...scoped,
+    "@/lib/invoice-online-payment": {},
+    "@/lib/invoice-breakdown": {},
     "@/models/invoice": {
       findOne: (query) => {
         filter = query;
@@ -183,6 +185,9 @@ test("actual booking handler rejects another customer's booking before fetching 
   let filter;
   const handler = await load("../app/api/customer/bookings/[id]/route.ts", {
     ...scoped,
+    "@/lib/job-start-otp": {},
+    "@/lib/job-quotes": {},
+    "@/lib/job-running-bill": {},
     "@/lib/customer-timeline": {},
     "@/models/index": {
       Booking: {
@@ -214,6 +219,7 @@ test("invoice PDF lookup is scoped before rendering or exposing an address", asy
   let filter;
   const handler = await load("../app/api/invoices/[id]/pdf/route.tsx", {
     ...scoped,
+    "@/lib/invoice-breakdown": {},
     "@/lib/auth": {
       requireCurrentUser: async () => ({ _id: id("1"), role: "customer" }),
     },
@@ -314,6 +320,12 @@ test("actual checkout handler rejects foreign ownership and ignores browser pric
     "../app/api/invoices/[id]/razorpay/order/route.ts",
     {
       ...scoped,
+      "@/lib/invoice-online-payment": {
+        saveCheckoutChannel: async (invoice) => {
+          if (!canPayInvoice(invoice)) throw new ApiError("Invoice is not payable", 409);
+          return invoice;
+        },
+      },
       "@/lib/auth": {
         requireCurrentUser: async () => ({ _id: id("1"), role: "customer" }),
       },
@@ -323,7 +335,9 @@ test("actual checkout handler rejects foreign ownership and ignores browser pric
           return {
             id: "order_test",
             amount: input.amountPaise,
+            amount_due: input.amountPaise,
             currency: "INR",
+            status: "created",
           };
         },
       },

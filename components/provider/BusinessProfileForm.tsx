@@ -19,6 +19,7 @@ import {
 } from "./ProviderUi";
 import { useProviderOnboarding } from "@/hooks/useProviderOnboarding";
 import api from "@/lib/api";
+import { ProviderPasswordSettings } from "@/components/auth/ProviderPasswordSettings";
 import type { ProviderProfile } from "@/lib/marketplace-types";
 
 function BusinessImageEditor({ provider }: { provider: ProviderProfile }) {
@@ -208,6 +209,7 @@ function ProfileEditor({ provider }: { provider: ProviderProfile }) {
   const client = useQueryClient();
   return (
     <div className="space-y-6">
+      <ProviderPasswordSettings />
       <BusinessImageEditor provider={provider} />
       <form
         className="provider-panel space-y-6"

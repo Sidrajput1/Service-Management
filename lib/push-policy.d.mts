@@ -8,6 +8,8 @@ export const pushEvents: readonly [
   "payment_verified",
   "booking_cancelled",
   "bill_review",
+  "quote_update",
+  "service_request_created",
 ];
 export type PushEvent = (typeof pushEvents)[number];
 export const pushTitle: string;

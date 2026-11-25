@@ -7,6 +7,7 @@ import {
 } from "./arrival-fields";
 // models/Job.ts
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { quotePricingSchema, type QuotePricing } from "./job-quote";
 
 export interface IJob extends Document {
   arrivalVersion?: number;
@@ -20,6 +21,7 @@ export interface IJob extends Document {
   assignedBy?: mongoose.Types.ObjectId;
   invoiceId?: mongoose.Types.ObjectId;
   scheduledAt?: Date;
+  scheduledEndAt?: Date;
   paymentReceivedAt?: Date;
   paymentMethod?: string;
   status:
@@ -34,6 +36,9 @@ export interface IJob extends Document {
     | "cancelled";
 
   otp?: string;
+  otpVersion?: number;
+  otpAttempts?: number;
+  otpLockedAt?: Date;
   paymentStatus?:
     | "unbilled"
     | "pending"
@@ -47,13 +52,31 @@ export interface IJob extends Document {
   proofRequired?: boolean;
   proofSubmittedAt?: Date;
   proofIds?: mongoose.Types.ObjectId[]; // references to JobProofs
-  partsUsed?: { partName: string; qty: number; price?: number }[];
+  partsUsed?: JobPart[];
+  partsVersion?: number;
+  partsDraftVersion?: number;
+  quotedPartsDraftVersion?: number;
+  quoteVersion?: number;
+  latestQuoteId?: string;
+  authorizedQuoteId?: string;
+  customerApprovedQuoteId?: string;
+  finalQuote?: QuotePricing;
   notes?: string;
   acceptedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   arrivedAt?: Date;
   customerOtpVerifiedAt?: Date;
+}
+
+export interface JobPart {
+  partId?: string;
+  partName: string;
+  qty: number;
+  price?: number;
+  source?: "on_site";
+  priceItemId?: mongoose.Types.ObjectId;
+  note?: string;
 }
 
 const JobSchema = new Schema<IJob>(
@@ -70,6 +93,7 @@ const JobSchema = new Schema<IJob>(
     assignedBy: { type: Schema.Types.ObjectId, ref: "User" },
     invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice" },
     scheduledAt: Date,
+    scheduledEndAt: Date,
     paymentReceivedAt: Date,
     paymentMethod: String,
     status: {
@@ -88,6 +112,9 @@ const JobSchema = new Schema<IJob>(
       default: "scheduled",
     },
     otp: { type: String, select: false },
+    otpVersion: { type: Number, select: false },
+    otpAttempts: { type: Number, select: false },
+    otpLockedAt: { type: Date, select: false },
     paymentStatus: {
       type: String,
       enum: [
@@ -100,13 +127,31 @@ const JobSchema = new Schema<IJob>(
       ],
       default: "unbilled",
     },
-    otpExpiresAt: Date,
+    otpExpiresAt: { type: Date, select: false },
     startTime: Date,
     endTime: Date,
     proofRequired: { type: Boolean, default: true },
     proofSubmittedAt: Date,
     proofIds: [{ type: Schema.Types.ObjectId, ref: "JobProof" }],
-    partsUsed: [{ partName: String, qty: Number, price: Number }],
+    partsUsed: [
+      {
+        partId: String,
+        partName: String,
+        qty: Number,
+        price: Number,
+        source: { type: String, enum: ["on_site"] },
+        priceItemId: { type: Schema.Types.ObjectId, ref: "PriceItem" },
+        note: String,
+      },
+    ],
+    partsVersion: Number,
+    partsDraftVersion: Number,
+    quotedPartsDraftVersion: Number,
+    quoteVersion: Number,
+    latestQuoteId: String,
+    authorizedQuoteId: String,
+    customerApprovedQuoteId: String,
+    finalQuote: { type: quotePricingSchema, default: undefined, select: false },
     notes: String,
     acceptedAt: Date,
     arrivedAt: Date,
@@ -132,6 +177,10 @@ JobSchema.set("toJSON", {
   transform: (_doc, ret) => {
     delete ret.otp;
     delete ret.otpExpiresAt;
+    delete ret.otpVersion;
+    delete ret.otpAttempts;
+    delete ret.otpLockedAt;
+    delete ret.finalQuote;
     delete ret.arrivalTracking;
     delete ret.arrivalNotification;
     stripServiceLocations(ret);
